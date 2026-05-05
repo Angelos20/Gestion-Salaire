@@ -1,0 +1,83 @@
+/* Fond transparent global */
+QWidget {
+    background: transparent;
+    font-family: Arial;
+}
+
+/* Carte */
+QFrame {
+    background-color: white;
+    border-radius: 20px;
+    padding: 20px;
+}
+
+/* Titre */
+#title {
+    font-size: 22px;
+    font-weight: bold;
+    color: black;
+}
+
+/* Inputs */
+QLineEdit {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+    color : black;
+}
+
+QLineEdit:focus {
+    border: 1px solid #1877f2;
+}
+
+/* Bouton principal */
+QPushButton {
+    background-color: #1877f2;
+    color: white;
+    border-radius: 8px;
+    padding: 10px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #166fe5;
+}
+
+/* Bouton annuler */
+#cancelBtn {
+    background-color: #e4e6eb;
+    color: black;
+}
+
+#cancelBtn:hover {
+    background-color: #d8dadf;
+}
+
+/* Bouton fermer */
+QPushButton {
+    border: none;
+}
+
+/* Sidebar */
+#sidebar {
+    background-color: #1e272e;
+}
+
+#menuBtn {
+    color: #dcdde1;
+    background: transparent;
+    border: none;
+    padding: 12px;
+    text-align: left;
+}
+
+#menuBtn:hover {
+    background-color: #485460;
+}
+
+#menuBtn:checked {
+    background-color: #0fbcf9;
+    color: white;
+    border-left: 4px solid #00a8ff;
+}
