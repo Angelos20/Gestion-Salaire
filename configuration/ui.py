@@ -1,14 +1,17 @@
+#configuration
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QFormLayout, QLabel,
-    QPushButton, QTimeEdit, QDoubleSpinBox,
-    QMessageBox, QTabWidget, QCheckBox,
-    QLineEdit, QFileDialog
+    QApplication, QWidget, QFrame, QLabel, QVBoxLayout,
+    QAbstractItemView, QTableWidgetItem, QPushButton, QLineEdit,QMessageBox,QTableWidget,
+    QCheckBox, QTimeEdit, QFormLayout, QDoubleSpinBox, QTabWidget, QFileDialog,QHeaderView
 )
-from PySide6.QtCore import QTime, Qt
-from PySide6.QtGui import QFont, QPixmap
-
-from configuration.config_model import get_config, update_config
-
+from PySide6.QtCore import Qt, QPoint, QSize, QTime
+from PySide6.QtGui import (
+    QPainter, QColor, QFont, QPen, QCursor, QPainterPath, QPixmap
+)
+import os
+from database import get_config, update_config, get_connection
+from modules.dashboard.controller import log_activite
+from security import set_user
 
 class ConfigRHView(QWidget):
     def __init__(self):
@@ -30,11 +33,21 @@ class ConfigRHView(QWidget):
                 font-size: 12px;
             }
 
-            QLineEdit, QDoubleSpinBox, QTimeEdit {
+            QTimeEdit {
                 padding: 6px;
                 border: 1px solid #D0D7E2;
                 border-radius: 6px;
                 background: white;
+            }
+
+            QLineEdit, QComboBox, QLabel, QDoubleSpinBox {
+                color: black;
+                padding: 8px;
+                border: 1px solid #C2D4E8;
+                border-radius: 5px;
+                background-color: white;
+                min-width: 200px;
+                font-family: sans serif;
             }
 
             QLineEdit:focus, QDoubleSpinBox:focus, QTimeEdit:focus {
@@ -60,16 +73,14 @@ class ConfigRHView(QWidget):
             }
 
             QPushButton {
-                background-color: #1E6FD9;
-                color: white;
-                padding: 10px;
-                border-radius: 8px;
-                font-weight: bold;
+                    background-color: #0A1640;
+                    color: white;
+                    font-weight: bold;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    font-family: sans serif;
             }
-
-            QPushButton:hover {
-                background-color: #1557b0;
-            }
+            QPushButton:hover { background-color:#1E6FD9; }
         """)
 
     # ───────────────────────── UI ─────────────────────────
@@ -90,6 +101,8 @@ class ConfigRHView(QWidget):
         self._tab_presence()
         self._tab_conges()
         self._tab_entreprise()
+        self._tab_utilisateur()
+        self._tab_activite()
 
         main.addWidget(self.tabs)
 
@@ -129,18 +142,12 @@ class ConfigRHView(QWidget):
         self.heures_mensuelles.setSuffix(" h/mois")
         self.heures_mensuelles.setToolTip("Heures normales de travail par mois (ex: 160)")
 
-        self.taux_horaire = QDoubleSpinBox()
-        self.taux_horaire.setRange(0, 10000000)
-        self.taux_horaire.setSuffix(" Ar/h")
-        self.taux_horaire.setToolTip("Salaire par heure")
-
         self.taux_hsup = QDoubleSpinBox()
         self.taux_hsup.setRange(1, 5)
         self.taux_hsup.setSingleStep(0.1)
         self.taux_hsup.setToolTip("Coefficient heures supplémentaires (ex: 1.5)")
 
         layout.addRow("Heures mensuelles", self.heures_mensuelles)
-        layout.addRow("Taux horaire", self.taux_horaire)
         layout.addRow("HS coefficient", self.taux_hsup)
 
         self.tabs.addTab(tab, "💰 Salaire")
@@ -182,9 +189,14 @@ class ConfigRHView(QWidget):
         self.plafond_avance.setRange(0, 10000000)
         self.plafond_avance.setSuffix(" Ar")
 
-        layout.addRow("Congés/mois", self.conges_par_mois)
+        self.sociale_impot = QDoubleSpinBox()
+        self.sociale_impot.setRange(0, 100)
+        self.sociale_impot.setSuffix(" %")
+
+        layout.addRow("Congés/an", self.conges_par_mois)
         layout.addRow("", self.autoriser_avance)
         layout.addRow("Plafond avance", self.plafond_avance)
+        layout.addRow("Sociales et Impots", self.sociale_impot)
 
         self.tabs.addTab(tab, "🏖️ Congés")
 
@@ -224,13 +236,211 @@ class ConfigRHView(QWidget):
     # ───────────────────────── LOGO ─────────────────────────
     def _choose_logo(self):
         file, _ = QFileDialog.getOpenFileName(
-            self, "Choisir logo", "", "Images (*.png *.jpg *.jpeg)"
+            self, "Choisir logo", os.path.join(os.path.expanduser("~"), "Pictures"), "Images (*.png *.jpg *.jpeg)"
         )
 
         if file:
             self.logo_path = file
             pix = QPixmap(file).scaled(120, 120, Qt.KeepAspectRatio)
             self.logo_label.setPixmap(pix)
+    # --------------------------UTILISATEUR---------------------
+    def _tab_utilisateur(self):
+        tab = QWidget()
+        layout = QFormLayout(tab)
+
+        self.table_users = QTableWidget()
+        self.table_users.setColumnCount(5)
+        self.table_users.verticalHeader().setDefaultSectionSize(30)
+        self.table_users.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table_users.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table_users.setFocusPolicy(Qt.NoFocus)
+        self.table_users.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_users.setHorizontalHeaderLabels(
+            ["ID", "Nom", "Username", "Email", "Poste"]
+        )
+        self.table_users.setStyleSheet("""
+                            QTableWidget {
+                                background-color: white;
+                                color: black;
+                                border: 1px solid #C2D4E8;
+                            }
+
+                            QHeaderView::section {
+                                background-color: #0A1628;
+                                color: white;
+                                font-weight: bold;
+                                border: none;
+                            }
+
+                            QTableWidget::item {
+                                border: none;
+                            }
+
+                            /* Supprime effet de focus */
+                            QTableWidget::item:focus {
+                                outline: none;
+                            }
+
+                            /* Sélection propre */
+                            QTableWidget::item:selected {
+                                background-color: #cce5ff;
+                                color: black;
+                            }
+                        """)
+        btn_del = QPushButton("🗑 Supprimer")
+        btn_upd = QPushButton("✏️ Modifier")
+
+        btn_del.clicked.connect(self._delete_user)
+        btn_upd.clicked.connect(self._update_user)
+
+        layout.addWidget(self.table_users)
+        layout.addWidget(btn_del)
+        layout.addWidget(btn_upd)
+
+        self._load_users()
+        self.tabs.addTab(tab,"👤 Utilisateurs")
+
+
+    def _load_users(self):
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT id, nom, username, email, poste FROM utilisateur")
+        rows = cur.fetchall()
+        conn.close()
+
+        self.table_users.setRowCount(len(rows))
+
+        for r, u in enumerate(rows):
+            for c in range(5):
+                self.table_users.setItem(r, c, QTableWidgetItem(str(u[c])))
+
+    def _delete_user(self):
+        row = self.table_users.currentRow()
+        if row == -1:
+            return
+
+        user_id = self.table_users.item(row, 0).text()
+
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("DELETE FROM utilisateur WHERE id=?", (user_id,))
+        conn.commit()
+        conn.close()
+
+        self._load_users()
+
+    def _update_user(self):
+        row = self.table_users.currentRow()
+        if row == -1:
+            return
+
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+                    UPDATE utilisateur
+                    SET nom=?, username=?, email=?, poste=?
+                    WHERE id=?
+                """, (
+            self.table_users.item(row, 1).text(),
+            self.table_users.item(row, 2).text(),
+            self.table_users.item(row, 3).text(),
+            self.table_users.item(row, 4).text(),
+            self.table_users.item(row, 0).text()
+        ))
+
+        conn.commit()
+        conn.close()
+        self._load_users()
+
+    # -------------------------ACTIVITES----------------------
+    def _tab_activite(self):
+        tab = QWidget()
+        layout = QFormLayout(tab)
+
+        self.table_logs = QTableWidget()
+        self.table_logs.setColumnCount(5)
+        self.table_logs.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table_logs.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table_logs.setFocusPolicy(Qt.NoFocus)
+        self.table_logs.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_logs.setHorizontalHeaderLabels(
+            ["ID", "Date", "Utilisateur", "Action", "Module"]
+        )
+        self.table_logs.setStyleSheet("""
+                            QTableWidget {
+                                background-color: white;
+                                color: black;
+                                border: 1px solid #C2D4E8;
+                            }
+
+                            QHeaderView::section {
+                                background-color: #0A1628;
+                                color: white;
+                                font-weight: bold;
+                                border: none;
+                            }
+
+                            QTableWidget::item {
+                                border: none;
+                            }
+
+                            /* Supprime effet de focus */
+                            QTableWidget::item:focus {
+                                outline: none;
+                            }
+
+                            /* Sélection propre */
+                            QTableWidget::item:selected {
+                                background-color: #cce5ff;
+                                color: black;
+                            }
+                        """)
+        btn_del = QPushButton("🗑 Supprimer activité")
+        btn_del.clicked.connect(self._delete_log)
+
+        layout.addWidget(self.table_logs)
+        layout.addWidget(btn_del)
+        self._load_logs()
+        self.tabs.addTab(tab, "Activités")
+
+    def _load_logs(self):
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, date, utilisateur, message, module
+            FROM activite
+            ORDER BY date DESC
+        """)
+
+        rows = cur.fetchall()
+        conn.close()
+
+        self.table_logs.setRowCount(len(rows))
+
+        for r, l in enumerate(rows):
+            for c in range(5):
+                self.table_logs.setItem(r, c, QTableWidgetItem(str(l[c])))
+
+    def _delete_log(self):
+        row = self.table_logs.currentRow()
+        if row == -1:
+            return
+
+        log_id = self.table_logs.item(row, 0).text()
+
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("DELETE FROM activite WHERE id=?", (log_id,))
+        conn.commit()
+        conn.close()
+
+        self._load_logs()
+
 
     # ───────────────────────── LOAD ─────────────────────────
     def _load(self):
@@ -248,16 +458,16 @@ class ConfigRHView(QWidget):
             self.aprem_fin.setTime(QTime.fromString(g(4, "17:30"), "HH:mm"))
 
             self.heures_mensuelles.setValue(float(g(5)))
-            self.taux_horaire.setValue(float(g(6)))
-            self.taux_hsup.setValue(float(g(7, 1)))
+            self.taux_hsup.setValue(float(g(6, 1)))
 
-            self.penalite_retard.setValue(float(g(8)))
-            self.penalite_depart.setValue(float(g(9)))
-            self.tolerance_retard.setValue(float(g(10)))
+            self.penalite_retard.setValue(float(g(7)))
+            self.penalite_depart.setValue(float(g(8)))
+            self.tolerance_retard.setValue(float(g(9)))
 
-            self.conges_par_mois.setValue(float(g(11)))
-            self.autoriser_avance.setChecked(bool(g(12)))
-            self.plafond_avance.setValue(float(g(13)))
+            self.conges_par_mois.setValue(float(g(10)))
+            self.autoriser_avance.setChecked(bool(g(11)))
+            self.plafond_avance.setValue(float(g(12)))
+            self.sociale_impot.setValue(float(g(13)))
 
             self.nom_entreprise.setText(g(14, "Entreprise"))
             self.adresse.setText(g(15, ""))
@@ -278,7 +488,6 @@ class ConfigRHView(QWidget):
                 "heure_aprem_fin": self.aprem_fin.time().toString("HH:mm"),
 
                 "heures_mensuelles": self.heures_mensuelles.value(),
-                "taux_horaire": self.taux_horaire.value(),
                 "taux_hsup": self.taux_hsup.value(),
 
                 "penalite_retard": self.penalite_retard.value(),
@@ -288,6 +497,7 @@ class ConfigRHView(QWidget):
                 "conges_par_mois": self.conges_par_mois.value(),
                 "autoriser_avance": int(self.autoriser_avance.isChecked()),
                 "plafond_avance": self.plafond_avance.value(),
+                "social_impot": self.sociale_impot.value(),
 
                 "nom_entreprise": self.nom_entreprise.text(),
                 "adresse": self.adresse.text(),
@@ -300,6 +510,10 @@ class ConfigRHView(QWidget):
 
             update_config(data)
 
+            log_activite(
+                "Configuration mise à jour",
+                module="configuration"
+            )
             QMessageBox.information(self, "Succès", "Configuration enregistrée")
 
         except Exception as e:

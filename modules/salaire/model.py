@@ -1,3 +1,4 @@
+#model salaire
 from configuration.database import get_connection
 from datetime import datetime
 
@@ -19,12 +20,11 @@ def get_employe_by_id(emp_id):
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT nom, prenom FROM employes WHERE id=?", (emp_id,))
+    cursor.execute("SELECT id, nom, prenom FROM employes WHERE id=?", (emp_id,))
     data = cursor.fetchone()
 
     conn.close()
     return data
-
 
 # ─────────────────────────────
 # AVANCES
@@ -34,7 +34,7 @@ def get_avances(employe_id, mois):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT SUM(montant)
+        SELECT COALESCE(SUM(montant), 0)
         FROM avances
         WHERE employe_id = ?
         AND strftime('%Y-%m', date) = ?
@@ -43,8 +43,22 @@ def get_avances(employe_id, mois):
     result = cursor.fetchone()[0]
     conn.close()
 
-    return result or 0
+    return float(result or 0)
 
+def get_avance_conf():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT plafond_avance, autoriser_avance
+        FROM configuration
+        LIMIT 1
+    """)
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result if result else (0, 0)
 # ─────────────────────────────
 # CONGÉS
 # ─────────────────────────────
@@ -62,19 +76,22 @@ def get_conges(employe_id, mois, salaire_base):
     conges = cursor.fetchall()
     conn.close()
 
-    deduction = 0
+    deduction = 0.0
 
     for debut, fin, paye in conges:
         if paye == 1:
-            continue  # congé payé → pas de déduction
+            continue
 
         d1 = datetime.strptime(debut, "%Y-%m-%d")
         d2 = datetime.strptime(fin, "%Y-%m-%d")
 
         jours = (d2 - d1).days + 1
-        deduction += jours * (salaire_base / 30)
+        deduction += jours * (float(salaire_base) / 30)
 
-    return deduction
+    return float(deduction)
+
+def format_money(value):
+    return f"{float(value or 0):,.0f}".replace(",", " ")
 
 # ─────────────────────────────
 # CALCUL + ENREGISTREMENT
@@ -88,14 +105,11 @@ def calculer_salaire_complet(employe_id, mois, primes=0):
     cursor.execute("""
         SELECT 
             e.salaire_base,
-
-            -- présence
             COALESCE(SUM(p.heure_travaillees), 0),
             COALESCE(SUM(CASE WHEN p.statut='absent' THEN 1 ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN p.statut='retard' THEN 1 ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN p.statut='partir tot' THEN 1 ELSE 0 END), 0),
 
-            -- avances
             (
                 SELECT COALESCE(SUM(a.montant), 0)
                 FROM avances a
@@ -103,17 +117,15 @@ def calculer_salaire_complet(employe_id, mois, primes=0):
                 AND substr(a.date, 1, 7) = ?
             ),
 
-            -- congés
             (
                 SELECT COALESCE(SUM(
-                    CASE 
-                        WHEN c.paye = 1 THEN 0
-                        ELSE (julianday(c.date_fin) - julianday(c.date_debut) + 1) * (e.salaire_base / 30)
-                    END
+                    (julianday(c.date_fin) - julianday(c.date_debut) + 1)
+                    * (e.salaire_base / 30)
                 ), 0)
                 FROM conges c
                 WHERE c.employe_id = e.id
                 AND substr(c.date_debut, 1, 7) = ?
+                AND c.paye = 0
             )
 
         FROM employes e
@@ -133,44 +145,32 @@ def calculer_salaire_complet(employe_id, mois, primes=0):
 
     salaire_base = row[0]
     heures = row[1]
-    absents = row[2]
     retard = row[3]
     depart = row[4]
     avances = row[5]
     conges = row[6]
 
-    # 🔥 calcul présence UNIQUEMENT
     result = calculer_salaire(
         salaire_base,
         heures,
-        absents,
         retard,
         depart,
+        avances,
+        conges,
         primes
     )
 
-    # 🔥 séparation propre
-    deductions_presence = result["deductions"]
-    salaire_reel = result["salaire_reel"]
-
-    # 🔥 TOTAL retenues
-    total_deductions = deductions_presence + avances + conges
-
-    # 🔥 NET FINAL UNIQUE (source unique)
-    net_final = max(0, salaire_reel + primes - total_deductions)
-
     return {
-        "base": salaire_base,
-        "salaire_reel": salaire_reel,
-        "primes": primes,
+        "base": format_money(result["base"]),
+        "salaire_reel": format_money(result["salaire_reel"]),
+        "primes": format_money(primes),
 
-        # 🔥 détail important
-        "deductions": deductions_presence,
-        "avances": avances,
-        "conges": conges,
-        "total_deductions": total_deductions,
+        "deductions": format_money(result["deductions"]),
+        "avances": format_money(avances),
+        "conges": format_money(conges),
 
-        "net": net_final
+        "social_impot": format_money(result["social_impot"]),
+        "net": format_money(result["net"])
     }
 
 def enregistrer_salaire(employe_id, mois, data):
@@ -181,8 +181,7 @@ def enregistrer_salaire(employe_id, mois, data):
 
     cursor.execute("""
         INSERT INTO salaire (
-            employe_id,
-            mois,
+            employe_id, mois,
             salaire_base,
             bonus,
             deduction,
@@ -201,13 +200,12 @@ def enregistrer_salaire(employe_id, mois, data):
     """, (
         employe_id,
         mois,
-        data["base"],
-        data["primes"],
-        data["deductions"],
-        data["net"],
+        format_money(data["base"]),
+        format_money(data["primes"]),
+        format_money(data["deductions"]),
+        format_money(data["net"]),
         statut
     ))
-
     conn.commit()
     conn.close()
 

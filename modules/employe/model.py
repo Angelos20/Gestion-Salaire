@@ -1,3 +1,4 @@
+import sqlite3
 from configuration.database import get_connection  # Assure-toi que get_connection() renvoie une connexion SQLite valide
 
 class EmployeModel:
@@ -17,17 +18,39 @@ class EmployeModel:
         return self._row_to_dict(row) if row else None
 
     def create(self, data):
-        cursor = self.conn.cursor()
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        emp_id = data.get("id")
+
+        # 🔍 vérifier si ID existe déjà
+        cursor.execute("SELECT id FROM employes WHERE id = ?", (emp_id,))
+        exists = cursor.fetchone()
+
+        if exists:
+            return None  # ID déjà utilisé
+
         cursor.execute("""
-            INSERT INTO employes (nom, prenom, email, telephone, poste, date_embauche, salaire_base, adresse, statut)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO employes (
+                id, nom, prenom, email, telephone,
+                poste, date_embauche, salaire_base, adresse, statut
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            data['nom'], data['prenom'], data['email'], data.get('telephone', ''),
-            data.get('poste', ''), data.get('date_embauche', ''), data.get('salaire_base', 0),
-            data.get('adresse', ''), data.get('statut', 'actif')
+            emp_id,
+            data.get('nom'),
+            data.get('prenom'),
+            data.get('email'),
+            data.get('telephone'),
+            data.get('poste'),
+            data.get('date_embauche'),
+            data.get('salaire_base'),
+            data.get('adresse'),
+            data.get('statut', 'actif')
         ))
-        self.conn.commit()
-        return cursor.lastrowid
+
+        conn.commit()
+        return emp_id
 
     def update(self, emp_id, data):
         cursor = self.conn.cursor()
@@ -77,3 +100,17 @@ class EmployeModel:
             'salaire_base': row[7], 'adresse': row[8], 'statut': row[9]
         }
 
+    def get_postes_uniques(self):
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT DISTINCT poste
+            FROM employes
+            WHERE poste IS NOT NULL AND poste != ''
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [row[0] for row in rows]

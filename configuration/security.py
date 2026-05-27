@@ -51,10 +51,7 @@ CURRENT_USER = None
 
 
 def set_user(user_tuple):
-    """
-    Initialise la session utilisateur depuis un tuple DB :
-    (id, username, email, role, ...)
-    """
+
     global CURRENT_USER
 
     if not user_tuple:
@@ -65,9 +62,8 @@ def set_user(user_tuple):
         "id": user_tuple[0],
         "username": user_tuple[1],
         "email": user_tuple[2],
-        "role": user_tuple[3] if len(user_tuple) > 3 else "user"
+        "role": user_tuple[3]
     }
-
 
 def get_user():
     """Retourne l'utilisateur connecté"""
@@ -90,10 +86,17 @@ def is_authenticated() -> bool:
 # ─────────────────────────────
 
 def get_username() -> str:
-    """Retourne le username ou unknown"""
     user = get_user()
-    return user.get("username", "unknown") if user else "unknown"
 
+    if not user:
+        return "unknown"
+
+    # admin reste admin
+    if user.get("role") == "admin":
+        return "admin"
+
+    # autres utilisateurs → vrai nom
+    return user.get("username", "unknown")
 
 def get_user_id():
     """Retourne l'ID utilisateur"""

@@ -1,8 +1,10 @@
+#liste presence
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QDateEdit, QComboBox,
-    QAbstractItemView, QFileDialog, QMessageBox
+    QAbstractItemView, QFileDialog, QMessageBox, QDialog
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont, QColor
@@ -10,6 +12,7 @@ from configuration.database import get_connection
 import os
 from modules.dashboard.controller import log_activite
 from configuration.security import get_user
+from configuration.audit_model import AuditModel
 
 class ListePresence(QWidget):
     def __init__(self):
@@ -19,6 +22,7 @@ class ListePresence(QWidget):
         self.setWindowTitle("Liste des Présences")
         self.setMinimumSize(1700, 800)
         self.setStyleSheet("background-color: #F5F7FA;")
+        self.audit = AuditModel()
 
         self.init_ui()
         self.afficher_presences()
@@ -204,14 +208,14 @@ class ListePresence(QWidget):
 
     # ---------------- RESET ----------------
     def vider_presences(self):
-        confirmation = QMessageBox.question(
-            self,
-            "Confirmation",
-            "Voulez-vous supprimer TOUTES les présences ?",
-            QMessageBox.Yes | QMessageBox.No
-        )
 
-        if confirmation == QMessageBox.Yes:
+        # Dialogue de confirmation
+        if self.show_dialog(
+                "Confirmation",
+                "Voulez-vous supprimer TOUTES les présences ?",
+                icon="warning",
+                yes_no=True
+        ) == QDialog.Accepted:
             conn = get_connection()
             cursor = conn.cursor()
 
@@ -219,16 +223,34 @@ class ListePresence(QWidget):
             conn.commit()
             conn.close()
 
+            # refresh table
             self.afficher_presences()
+
             user = get_user()
+
+            # AUDIT
+            self.audit.log(
+                action="DELETE_ALL",
+                table="presence",
+                record_id=None,
+                old_data=None,
+                new_data={"action": "Suppression totale des présences"},
+                utilisateur=user["username"]
+            )
+
+            # LOG
             log_activite(
-                f"Suppression de la liste de présence réussie",
+                "Suppression de la liste de présence réussie",
                 module="presence",
                 utilisateur=user["username"]
             )
 
-            QMessageBox.information(self, "Succès", "Toutes les présences ont été supprimées.")
-
+            # SUCCESS DIALOG (stylé)
+            self.show_dialog(
+                "Succès",
+                "Toutes les présences ont été supprimées avec succès.",
+                icon="success"
+            )
     # ---------------- EXPORT ----------------
     def exporter_fichier(self):
         file_path, selected_filter = QFileDialog.getSaveFileName(
@@ -247,12 +269,48 @@ class ListePresence(QWidget):
                     file_path += ".xlsx"
                 self.export_excel(file_path)
 
+                user = get_user()
+
+                self.audit.log(
+                    action="EXPORT_EXCEL",
+                    table="presence",
+                    record_id=None,
+                    old_data=None,
+                    new_data={"file": file_path},
+                    utilisateur=user["username"]
+                )
+
+
             elif "pdf" in selected_filter:
+
                 if not file_path.endswith(".pdf"):
                     file_path += ".pdf"
+
                 self.export_pdf(file_path)
 
-            QMessageBox.information(self, "Succès", "Export réussi !")
+                user = get_user()
+
+                self.audit.log(
+
+                    action="EXPORT_PDF",
+
+                    table="presence",
+
+                    record_id=None,
+
+                    old_data=None,
+
+                    new_data={"file": file_path},
+
+                    utilisateur=user["username"]
+
+                )
+
+            self.show_dialog(
+                "Succès",
+                "Export réussi !",
+                icon="success"
+            )
 
             user = get_user()
             log_activite(
@@ -263,8 +321,11 @@ class ListePresence(QWidget):
 
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", str(e))
-
+            self.show_dialog(
+                "Erreur",
+                str(e),
+                icon="error"
+            )
     def export_excel(self, file_path):
         from openpyxl import Workbook
 
@@ -334,3 +395,101 @@ class ListePresence(QWidget):
                font-family: sans-serif;
            }
            """
+
+    def show_dialog(self, title, message, icon="info", yes_no=False):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setMinimumWidth(420)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: white;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #1A2C3E;
+            }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # ICON
+        icon_label = QLabel()
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setFont(QFont("Segoe UI", 28))
+
+        if icon == "success":
+            icon_label.setText("✅")
+        elif icon == "error":
+            icon_label.setText("❌")
+        elif icon == "warning":
+            icon_label.setText("⚠️")
+        else:
+            icon_label.setText("ℹ️")
+
+        layout.addWidget(icon_label)
+
+        # MESSAGE
+        msg = QLabel(message)
+        msg.setAlignment(Qt.AlignCenter)
+        msg.setWordWrap(True)
+        msg.setFont(QFont("Segoe UI", 11))
+        layout.addWidget(msg)
+
+        # BUTTONS
+        btn_layout = QHBoxLayout()
+
+        if yes_no:
+            btn_no = QPushButton("Non")
+            btn_yes = QPushButton("Oui")
+
+            btn_no.setStyleSheet("""
+                QPushButton {
+                    background-color: #E5E7EB;
+                    color: #111827;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                }
+                QPushButton:hover {
+                    background-color: #D1D5DB;
+                }
+            """)
+
+            btn_yes.setStyleSheet("""
+                QPushButton {
+                    background-color: #0A1640;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                }
+                QPushButton:hover {
+                    background-color: #1E6FD9;
+                }
+            """)
+
+            btn_yes.clicked.connect(dialog.accept)
+            btn_no.clicked.connect(dialog.reject)
+
+            btn_layout.addWidget(btn_no)
+            btn_layout.addWidget(btn_yes)
+
+        else:
+            btn_ok = QPushButton("OK")
+            btn_ok.setStyleSheet("""
+                QPushButton {
+                    background-color: #0A1640;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                }
+                QPushButton:hover {
+                    background-color: #1E6FD9;
+                }
+            """)
+            btn_ok.clicked.connect(dialog.accept)
+            btn_layout.addWidget(btn_ok)
+
+        layout.addLayout(btn_layout)
+
+        return dialog.exec()

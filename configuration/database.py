@@ -1,3 +1,4 @@
+#database.py
 import sqlite3
 from configuration.config import DB_PATH
 from configuration.security import hash_password
@@ -7,18 +8,21 @@ from configuration.security import hash_password
 # CONNEXION
 # ─────────────────────────────────────────────
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def get_config():
     conn = get_connection()
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM configuration LIMIT 1")
-    config = cursor.fetchone()
+    row = cursor.fetchone()
 
     conn.close()
-    return config
 
+    return dict(row) if row else {}
 
 def update_config(data):
     conn = get_connection()
@@ -47,6 +51,7 @@ def update_config(data):
                 conges_par_mois = ?,
                 autoriser_avance = ?,
                 plafond_avance = ?,
+                social_impot = ?,
 
                 nom_entreprise = ?,
                 adresse = ?,
@@ -72,6 +77,7 @@ def update_config(data):
             data["conges_par_mois"],
             data["autoriser_avance"],
             data["plafond_avance"],
+            data["social_impot"],
 
             data["nom_entreprise"],
             data["adresse"],
@@ -101,6 +107,7 @@ def update_config(data):
                 conges_par_mois,
                 autoriser_avance,
                 plafond_avance,
+                social_impot,
 
                 nom_entreprise,
                 adresse,
@@ -109,7 +116,7 @@ def update_config(data):
                 devise,
                 logo_path
             )
-            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data["heure_matin_debut"],
             data["heure_matin_fin"],
@@ -126,6 +133,7 @@ def update_config(data):
             data["conges_par_mois"],
             data["autoriser_avance"],
             data["plafond_avance"],
+            data["social_impot"],
 
             data["nom_entreprise"],
             data["adresse"],
@@ -170,7 +178,7 @@ def init_db():
     # ─── TABLE EMPLOYE ───────────────────────
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS employes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT PRIMARY KEY NOT NULL,
         nom TEXT NOT NULL,
         prenom TEXT ,
         email TEXT,
@@ -187,11 +195,12 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS presence (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        employe_id INTEGER,
+        employe_id TEXT,
         date TEXT,
         heure_entree TEXT,
         heure_sortie TEXT,
         heure_travaillees REAL,
+        heures_supp REAL,
         statut TEXT, -- present / absent / retard
         FOREIGN KEY (employe_id) REFERENCES employes(id)
     )
@@ -201,7 +210,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS salaire (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        employe_id INTEGER,
+        employe_id TEXT,
         mois TEXT,
         salaire_base REAL,
         bonus REAL DEFAULT 0,
@@ -218,7 +227,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS avances (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        employe_id INTEGER,
+        employe_id TEXT,
         montant REAL,
         date TEXT
     )
@@ -228,11 +237,29 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS conges (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        employe_id INTEGER,
+        employe_id TEXT,
         date_debut TEXT,
         date_fin TEXT,
+        date_conge TEXT,
         type TEXT,
         paye INTEGER DEFAULT 1
+    )
+    """)
+
+    # ─── TABLE AUDIT LOG ───────────────────────
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        action TEXT,
+        table_name TEXT,
+        record_id TEXT,
+
+        old_data TEXT,
+        new_data TEXT,
+
+        utilisateur TEXT,
+        date_heure TEXT
     )
     """)
 
@@ -260,6 +287,7 @@ def init_db():
         conges_par_mois REAL,
         autoriser_avance INTEGER,
         plafond_avance REAL,
+        social_impot REAL,
 
         -- 🏢 ENTREPRISE
         nom_entreprise TEXT,

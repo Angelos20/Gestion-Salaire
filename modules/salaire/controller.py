@@ -4,39 +4,116 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from datetime import datetime
+from configuration.database import get_config
+from reportlab.platypus import Image
+import os
 
 
-# ─────────────────────────────
-# CALCUL SALAIRE (BASE PURE)
-# ─────────────────────────────
-def calculer_salaire(salaire_base, heures, absents, retard, depart, primes=0):
-    taux_horaire = salaire_base / 173 if salaire_base else 0
+# ─────────────────────────────────────────────
+# UTILITAIRE SAFE FLOAT
+# ─────────────────────────────────────────────
+def to_float(value):
+    if value is None:
+        return 0.0
 
-    salaire_reel = heures * taux_horaire  # ✔ CORRECT
+    if isinstance(value, (int, float)):
+        return float(value)
 
-    penalite_absence = absents * (salaire_base / 30 if salaire_base else 0)
-    penalite_retard = retard * 2000
-    penalite_depart = depart * 2000
+    if isinstance(value, str):
+        value = value.replace(" ", "").replace(",", "")
+        try:
+            return float(value)
+        except:
+            return 0.0
 
-    deductions = penalite_absence + penalite_retard + penalite_depart
+    return 0.0
 
-    salaire_net = salaire_reel + primes - deductions
+
+def safe(v):
+    return f"{to_float(v):,.0f}".replace(",", " ")
+
+
+# ─────────────────────────────────────────────
+# CALCUL SALAIRE
+# ─────────────────────────────────────────────
+def calculer_salaire(
+        salaire_base,
+        heures,
+        retard,
+        depart,
+        avances,
+        conges=0,
+        primes=0
+):
+
+    config = get_config()
+    if not config:
+        raise Exception("Configuration introuvable")
+
+    heures_mensuelles = config.get("heures_mensuelles", 173)
+    penalite_retard_cfg = config.get("penalite_retard", 0)
+    penalite_depart_cfg = config.get("penalite_depart", 0)
+    social_impot_cfg = config.get("social_impot", 0)
+
+    salaire_base = to_float(salaire_base)
+    heures = to_float(heures)
+    retard = to_float(retard)
+    depart = to_float(depart)
+    avances = to_float(avances)
+    conges = to_float(conges)
+    primes = to_float(primes)
+
+    taux_horaire = salaire_base / heures_mensuelles if heures_mensuelles else 0
+
+    salaire_reel = heures * taux_horaire
+
+    penalite_retard = retard * penalite_retard_cfg
+    penalite_depart = depart * penalite_depart_cfg
+
+    social_impot = salaire_reel * (social_impot_cfg / 100)
+
+    deductions = (
+        penalite_retard +
+        penalite_depart +
+        social_impot +
+        avances +
+        conges
+    )
+
+    net = salaire_reel + primes - deductions
 
     return {
-        "base": salaire_base,
-        "salaire_reel": salaire_reel,
-        "primes": primes,
-        "deductions": deductions,
-        "salaire_net": salaire_net,
+        "base": round(salaire_base, 3),
+        "salaire_reel": round(salaire_reel, 3),
+        "primes": round(primes, 3),
+
+        "penalite_retard": round(penalite_retard, 3),
+        "penalite_depart": round(penalite_depart, 3),
+        "social_impot": round(social_impot, 3),
+
+        "avances": round(avances, 3),
+        "conges": round(conges, 3),
+
+        "deductions": round(deductions, 3),
+        "net": round(max(0, net), 3)
     }
 
-# ─────────────────────────────
+
+# ─────────────────────────────────────────────
 # BULLETIN PDF COMPLET
-# ─────────────────────────────
-def generer_bulletin_pdf(emp_id, nom, mois, data, filename="bulletin.pdf"):
+# ─────────────────────────────────────────────
+def generer_bulletin_pdf(emp_id, nom, prenom, mois, data, filename="bulletin.pdf"):
     doc = SimpleDocTemplate(filename, pagesize=A4)
     styles = getSampleStyleSheet()
 
+    config = get_config()
+
+    nom_entreprise = config.get("nom_entreprise", "ENTREPRISE XYZ")
+    logo_path = config.get("logo_path", None)
+
+    elements = []  # ✅ DOIT ÊTRE EN PREMIER
+
+    # ───── STYLE TITRE ─────
     title_style = ParagraphStyle(
         name="TitleCustom",
         parent=styles["Title"],
@@ -46,10 +123,18 @@ def generer_bulletin_pdf(emp_id, nom, mois, data, filename="bulletin.pdf"):
         spaceAfter=20
     )
 
-    elements = []
+    # ───── LOGO (CORRIGÉ) ─────
+    from reportlab.platypus import Image
+    import os
 
-    # ───────── TITRE ─────────
-    elements.append(Paragraph("ENTREPRISE XYZ", title_style))
+    if logo_path and os.path.exists(logo_path):
+        logo = Image(logo_path)
+        logo.drawHeight = 60
+        logo.drawWidth = 60
+        elements.append(logo)
+
+    # ───── TITRE ENTREPRISE ─────
+    elements.append(Paragraph(nom_entreprise, title_style))
     elements.append(Paragraph("BULLETIN DE PAIE", title_style))
     elements.append(Spacer(1, 10))
 
@@ -57,10 +142,10 @@ def generer_bulletin_pdf(emp_id, nom, mois, data, filename="bulletin.pdf"):
     elements.append(Paragraph(f"Date : {datetime.now().strftime('%d/%m/%Y')}", styles["Normal"]))
     elements.append(Spacer(1, 15))
 
-    # ───────── INFOS EMPLOYÉ ─────────
+    # ───── INFOS EMPLOYÉ ─────
     info_table = [
         ["Matricule", str(emp_id)],
-        ["Nom & Prénom", f"{nom}"],
+        ["Nom & Prénom", f"{nom} {prenom}"],
     ]
 
     t1 = Table(info_table, colWidths=[150, 300])
@@ -74,17 +159,27 @@ def generer_bulletin_pdf(emp_id, nom, mois, data, filename="bulletin.pdf"):
     elements.append(t1)
     elements.append(Spacer(1, 15))
 
-    # ───────── SALAIRE ─────────
+    # ───── NORMALISATION DATA ─────
+    base = to_float(data.get("base"))
+    salaire_reel = to_float(data.get("salaire_reel"))
+    primes = to_float(data.get("primes"))
+    avances = to_float(data.get("avances"))
+    conges = to_float(data.get("conges"))
+    deductions = to_float(data.get("deductions"))
+    net = to_float(data.get("net"))
+
+    penalites_impots = deductions - avances - conges
+
+    # ───── TABLE SALAIRE ─────
     table_data = [
         ["DÉSIGNATION", "MONTANT (Ar)"],
-        ["Salaire de base", f"{data.get('base', 0):,.0f}"],
-        ["Salaire réel", f"{data.get('salaire_reel', 0):,.0f}"],
-        ["Primes", f"{data.get('primes', 0):,.0f}"],
-        ["Avances", f"{data.get('avances', 0):,.0f}"],
-        ["Congés", f"{data.get('conges', 0):,.0f}"],
-        ["Retenues présence", f"{data.get('deductions', 0):,.0f}"],
-        ["TOTAL RETENUES",
-         f"{data.get('deductions', 0) + data.get('avances', 0) + data.get('conges', 0):,.0f}"],
+        ["Salaire de base", safe(base)],
+        ["Salaire réel", safe(salaire_reel)],
+        ["Primes", safe(primes)],
+        ["Avances", safe(avances)],
+        ["Congés", safe(conges)],
+        ["Pénalités + Impôts", safe(penalites_impots)],
+        ["TOTAL RETENUES", safe(deductions)],
     ]
 
     t2 = Table(table_data, colWidths=[300, 150])
@@ -99,18 +194,16 @@ def generer_bulletin_pdf(emp_id, nom, mois, data, filename="bulletin.pdf"):
     elements.append(t2)
     elements.append(Spacer(1, 20))
 
-    # ───────── NET ─────────
-    net = data.get("net", 0)
-
+    # ───── NET ─────
     net_table = Table([
-        ["NET À PAYER", f"{net:,.0f} Ar"]
+        ["NET À PAYER", f"{safe(net)} Ar"]
     ], colWidths=[300, 150])
 
     net_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#1E6FD9")),
         ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
         ("PADDING", (0, 0), (-1, -1), 10),
     ]))
 

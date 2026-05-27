@@ -11,7 +11,8 @@ from configuration.security import verify_password, set_user
 from .signup import PageSignUp
 from modules.dashboard.controller import log_activite
 from resources.style import getStyleSheet
-
+from configuration.audit_model import AuditModel
+audit = AuditModel()
 
 class PageLogin(QWidget):
     def __init__(self):
@@ -113,11 +114,12 @@ class PageLogin(QWidget):
         if time.time() < self.blocked_until:
             remaining = int(self.blocked_until - time.time())
 
-            QMessageBox.warning(
-                self,
-                "Bloqué",
-                f"Trop de tentatives. Réessaie dans {remaining} secondes"
-            )
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Bloqué")
+            msg.setText(f"Trop de tentatives. Réessaie dans {remaining} secondes")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
 
             log_activite(
                 f"Tentative bloquée ({remaining}s restant)",
@@ -130,7 +132,12 @@ class PageLogin(QWidget):
         password = self.password.text().strip()
 
         if not username or not password:
-            QMessageBox.warning(self, "Erreur", "Champs vides")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Champs vides")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
             return
 
         conn = get_connection()
@@ -145,11 +152,34 @@ class PageLogin(QWidget):
         # ❌ utilisateur introuvable
         if not user:
             self.fail_login(username, "Utilisateur introuvable")
+            audit.log(
+                action="LOGIN_FAILED",
+                table="utilisateur",
+                record_id=username,
+                old_data=None,
+                new_data={
+                    "reason": "Utilisateur introuvable",
+                    "type": "user_not_found"
+                },
+                utilisateur=username
+            )
             return
+
 
         # ❌ mot de passe incorrect
         if not verify_password(password, user[4]):
             self.fail_login(username, "Mot de passe incorrect")
+            audit.log(
+                action="LOGIN_FAILED",
+                table="utilisateur",
+                record_id=user[0],
+                old_data=None,
+                new_data={
+                    "reason": "wrong_password",
+                    "username": username
+                },
+                utilisateur=username
+            )
             return
 
         # ✔ succès login
@@ -157,12 +187,28 @@ class PageLogin(QWidget):
         set_user(user)
 
         log_activite(
-            message="Connexion réussie",
+            message=f"Connexion réussie pour {username}",
             module="auth",
             utilisateur=username
         )
+        audit.log(
+            action="LOGIN_SUCCESS",
+            table="utilisateur",
+            record_id=user[0],  # adapte si id colonne différente
+            old_data=None,
+            new_data={
+                "username": username,
+                "status": "success"
+            },
+            utilisateur=username
+        )
 
-        QMessageBox.information(self, "Succès", "Connexion réussie")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Succès")
+        msg.setText("Connexion réussie")
+        msg.setIcon(QMessageBox.Information)
+        msg.setStyleSheet(self.styled_messagebox())
+        msg.exec()
         self.open_accueil()
 
     # ───────── FAIL LOGIN ─────────
@@ -176,7 +222,12 @@ class PageLogin(QWidget):
             utilisateur=username
         )
 
-        QMessageBox.critical(self, "Erreur", reason)
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Erreur")
+        msg.setText(reason)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setStyleSheet(self.styled_messagebox())
+        msg.exec()
 
         # 🔒 blocage après 3 tentatives
         if self.attempts >= self.max_attempts:
@@ -185,16 +236,28 @@ class PageLogin(QWidget):
             self.attempts = 0
 
             log_activite(
-                message="Blocage 30s après 3 tentatives",
+                message=f"Compte bloqué après {self.max_attempts} tentatives",
                 module="security",
                 utilisateur=username
             )
-
-            QMessageBox.warning(
-                self,
-                "Bloqué",
-                "Trop de tentatives. Attends 30 secondes."
+            audit.log(
+                action="ACCOUNT_LOCKED",
+                table="utilisateur",
+                record_id=username,
+                old_data=None,
+                new_data={
+                    "block_duration": self.block_time,
+                    "attempts": self.attempts
+                },
+                utilisateur=username
             )
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Bloqué")
+            msg.setText("Trop de tentatives. Attends 30 secondes.")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
 
     # ───────── CLEAR ─────────
     def clear_fields(self):
@@ -235,3 +298,28 @@ class PageLogin(QWidget):
             delta = event.globalPosition().toPoint() - self.old_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.old_pos = event.globalPosition().toPoint()
+
+    def styled_messagebox(self):
+        return """
+        QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+
+        QLabel {
+            color: #0A1628;
+            font-size: 13px;
+        }
+
+        QPushButton {
+            background-color: #1E6FD9;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            min-width: 80px;
+        }
+
+        QPushButton:hover {
+            background-color: #2A85FF;
+        }
+        """

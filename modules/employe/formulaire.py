@@ -5,6 +5,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QFont
 from resources.style import getStyleSheet
+from modules.dashboard.controller import log_activite
+from configuration.audit_model import AuditModel
+from configuration.security import get_user
+
+audit = AuditModel()
 
 class EmployeFormulaire(QWidget):
     employe_sauvegarde = Signal(dict)
@@ -32,7 +37,7 @@ class EmployeFormulaire(QWidget):
         title = QLabel("Informations de l'employé")
         title.setFont(QFont("Segoe UI d", 18, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #1E293B;")
+        title.setStyleSheet("color: white;")
         layout.addWidget(title)
 
         # Formulaire
@@ -44,6 +49,14 @@ class EmployeFormulaire(QWidget):
         form.setLabelAlignment(Qt.AlignRight)
 
         # Champs
+        self.lbl_id = QLabel("Identifiant *:")
+        self.lbl_id.setStyleSheet(self.getStyleSheet())
+        self.id = QLineEdit()
+        self.id.setPlaceholderText("E-00001")
+        self.id.setMinimumHeight(35)
+        form.addRow(self.lbl_id, self.id)
+        self.id.setStyleSheet(self.getStyleSheet())
+
         self.lbl_nom = QLabel("Nom *:")
         self.lbl_nom.setStyleSheet(self.getStyleSheet())
         self.nom = QLineEdit()
@@ -52,7 +65,7 @@ class EmployeFormulaire(QWidget):
         form.addRow(self.lbl_nom, self.nom)
         self.nom.setStyleSheet(self.getStyleSheet())
 
-        self.lbl_prenom = QLabel("Prénom *:")
+        self.lbl_prenom = QLabel("Prénom :")
         self.lbl_prenom.setStyleSheet(self.getStyleSheet())
         self.prenom = QLineEdit()
         self.prenom.setPlaceholderText("Jean")
@@ -60,7 +73,7 @@ class EmployeFormulaire(QWidget):
         form.addRow(self.lbl_prenom, self.prenom)
         self.prenom.setStyleSheet(self.getStyleSheet())
 
-        self.lbl_email = QLabel("Email *:")
+        self.lbl_email = QLabel("Email :")
         self.lbl_email.setStyleSheet(self.getStyleSheet())
         self.email = QLineEdit()
         self.email.setPlaceholderText("jean.dupont@email.com")
@@ -68,7 +81,7 @@ class EmployeFormulaire(QWidget):
         form.addRow(self.lbl_email, self.email)
         self.email.setStyleSheet(self.getStyleSheet())
 
-        self.lbl_tel = QLabel("Téléphone:")
+        self.lbl_tel = QLabel("Téléphone *:")
         self.lbl_tel.setStyleSheet(self.getStyleSheet())
         self.tel = QLineEdit()
         self.tel.setPlaceholderText("+261 32 12 345 67")
@@ -111,7 +124,7 @@ class EmployeFormulaire(QWidget):
         self.statut.setStyleSheet(self.getStyleSheet())
         form.addRow(self.lbl_statut, self.statut)
 
-        self.lbl_adresse = QLabel("Adresse:")
+        self.lbl_adresse = QLabel("Adresse *:")
         self.lbl_adresse.setStyleSheet(self.getStyleSheet())
         self.adresse = QTextEdit()
         self.adresse.setMaximumHeight(80)
@@ -124,7 +137,6 @@ class EmployeFormulaire(QWidget):
 
         # Boutons
         btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
 
         self.btn_save = QPushButton("Enregistrer")
         self.btn_save.setMinimumHeight(40)
@@ -143,6 +155,7 @@ class EmployeFormulaire(QWidget):
         layout.addLayout(btn_layout)
 
     def remplir(self):
+        self.id.setText(self.employe.get('id', ''))
         self.nom.setText(self.employe.get('nom', ''))
         self.prenom.setText(self.employe.get('prenom', ''))
         self.email.setText(self.employe.get('email', ''))
@@ -155,8 +168,14 @@ class EmployeFormulaire(QWidget):
         self.adresse.setText(self.employe.get('adresse', ''))
 
     def sauvegarder(self):
-        if not self.nom.text() or not self.prenom.text() or not self.email.text():
-            QMessageBox.warning(self, "Erreur", "Veuillez remplir les champs obligatoires (*)")
+        if not self.id.text() or not self.nom.text() or not self.tel.text() or not self.poste.text() or not self.salaire.text():
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Veuillez remplir \n les champs obligatoires (*)")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+
+            msg.exec()
             return
 
         try:
@@ -165,6 +184,7 @@ class EmployeFormulaire(QWidget):
             salaire = 0
 
         data = {
+            'id': self.id.text(),
             'nom': self.nom.text(),
             'prenom': self.prenom.text(),
             'email': self.email.text(),
@@ -177,16 +197,106 @@ class EmployeFormulaire(QWidget):
         }
 
         if self.is_modification:
+
+            # Anciennes données
+            old_data = self.employe.copy()
+
             result = self.controller.modifier(self.employe['id'], data)
+
+            log_activite(
+                f"Modification employé ID {self.employe['id']}",
+                module="employe",
+                utilisateur="system"
+            )
+
+            user = get_user()
+
+            audit.log(
+                action="MODIFICATION",
+                table="employes",
+                record_id=data["id"],
+
+                old_data=old_data,
+
+                new_data=data,
+
+                utilisateur=user["username"]
+            )
+
         else:
+
             result = self.controller.ajouter(data)
 
+
+            log_activite(
+                f"Ajout nouvel employé {data['nom']} {data['prenom']}",
+                module="employe",
+                utilisateur="system"
+            )
+
+            user = get_user()
+
+            audit.log(
+                action="AJOUT",
+                table="employes",
+                record_id=data["id"],
+
+                old_data=None,
+
+                new_data=data,
+
+                utilisateur=user["username"]
+            )
+
         if result.get('success'):
-            QMessageBox.information(self, "Succès", "Employé enregistré avec succès!")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Succès")
+            msg.setText("Employé enregistré \n avec succès!")
+            msg.setIcon(QMessageBox.Information)
+            msg.setStyleSheet(self.styled_messagebox())
+
+            msg.exec()
             self.employe_sauvegarde.emit(result.get('employe', data))
             self.close()
         else:
-            QMessageBox.critical(self, "Erreur", f"Erreur: {result.get('error')}")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText(f"Erreur: {result.get('error')}")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+
+            msg.exec()
+
+            log_activite(
+                f"Erreur sauvegarde employé: {result.get('error')}",
+                module="employe",
+                utilisateur="system"
+            )
+
+    def styled_messagebox(self):
+        return """
+        QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+
+        QLabel {
+            color: #0A1628;
+            font-size: 13px;
+        }
+
+        QPushButton {
+            background-color: #1E6FD9;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            min-width: 80px;
+        }
+
+        QPushButton:hover {
+            background-color: #2A85FF;
+        }
+        """
 
     def getStyleSheet(self):
         return """
@@ -258,4 +368,35 @@ class EmployeFormulaire(QWidget):
         QComboBox::drop-down {
             border: none;
         }
+        
+        QMessageBox {
+                background-color: #F6F8FB;
+                border-radius: 6px;
+            }
+            
+            QMessageBox QLabel {
+                color: #0A1640;
+                font-size: 15px;
+                font-weight: bold;
+                font-family: sans-serif;
+                min-width: 250px;
+            }
+            
+            QMessageBox QPushButton {
+                background-color: #0A1640;
+                color: white;
+                border-radius: 6px;
+                padding: 8px 18px;
+                font-size: 13px;
+                font-weight: bold;
+                min-width: 80px;
+            }
+            
+            QMessageBox QPushButton:hover {
+                background-color: #1E6FD9;
+            }
+            
+            QMessageBox QPushButton:pressed {
+                background-color: #163E73;
+            }
         """

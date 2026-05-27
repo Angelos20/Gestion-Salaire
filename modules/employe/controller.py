@@ -20,31 +20,22 @@ class EmployeController(QObject):
 
     # Ajouter un nouvel employé
     def ajouter(self, data):
-
         emp_id = self.model.create(data)
+
         employe = self.model.get_by_id(emp_id)
 
-        log_activite(
-            f"Ajout d'un employé réussie",
-            module="employe",
-            utilisateur=emp_id
-        )
+        if not employe:
+            return {"success": False, "error": "Erreur création employé"}
 
         self.liste_changed.emit(self.get_liste())
-        return {"success": True, "employe": employe}
 
+        return {"success": True, "employe": employe}
 
     # Modifier un employé existant
     def modifier(self, emp_id, data):
         if self.model.update(emp_id, data):
             employe = self.model.get_by_id(emp_id)
             self.liste_changed.emit(self.get_liste())
-
-            log_activite(
-                f"Modification d'un employé réussie",
-                module="employe",
-                utilisateur=emp_id
-            )
 
             return {"success": True, "employe": employe}
         return {"success": False, "error": "Employé non trouvé"}
@@ -53,12 +44,6 @@ class EmployeController(QObject):
     def supprimer(self, emp_id):
         if self.model.delete(emp_id):
             self.liste_changed.emit(self.get_liste())
-
-            log_activite(
-                f"Suppresion d'un employé réussie",
-                module="employe",
-                utilisateur=emp_id
-            )
 
             return {"success": True}
         return {"success": False, "error": "Employé non trouvé"}
@@ -70,3 +55,6 @@ class EmployeController(QObject):
     # Obtenir les statistiques
     def get_statistiques(self):
         return self.model.get_statistiques()
+
+    def filtrer_par_poste(self, poste_id):
+        return self.model.get_by_poste(poste_id)

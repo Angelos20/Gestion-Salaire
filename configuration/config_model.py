@@ -16,25 +16,56 @@ def update_config(data):
     cursor = conn.cursor()
 
     cursor.execute("""
-        UPDATE configuration SET
-        heure_matin_debut = ?,
-        heure_matin_fin = ?,
-        heure_aprem_debut = ?,
-        heure_aprem_fin = ?,
-        heures_mensuelles = ?,
-        penalite_retard = ?,
-        penalite_depart = ?,
-        taux_absence_jour = ?
-        WHERE id = 1
-    """, (
-        data["matin_debut"],
-        data["matin_fin"],
-        data["aprem_debut"],
-        data["aprem_fin"],
+               UPDATE configuration SET
+                   heure_matin_debut = ?,
+                   heure_matin_fin = ?,
+                   heure_aprem_debut = ?,
+                   heure_aprem_fin = ?,
+
+                   heures_mensuelles = ?,
+                   taux_hsup = ?,
+
+                   penalite_retard = ?,
+                   penalite_depart = ?,
+                   tolerance_retard = ?,
+
+                   conges_par_mois = ?,
+                   autoriser_avance = ?,
+                   plafond_avance = ?,
+                   social_impot = ?,
+
+                   nom_entreprise = ?,
+                   adresse = ?,
+                   email = ?,
+                   telephone = ?,
+                   devise = ?,
+                   logo_path = ?
+
+               WHERE id = 1
+           """, (
+        data["heure_matin_debut"],
+        data["heure_matin_fin"],
+        data["heure_aprem_debut"],
+        data["heure_aprem_fin"],
+
         data["heures_mensuelles"],
+        data["taux_hsup"],
+
         data["penalite_retard"],
         data["penalite_depart"],
-        data["taux_absence"]
+        data["tolerance_retard"],
+
+        data["conges_par_mois"],
+        data["autoriser_avance"],
+        data["plafond_avance"],
+        data["social_impot"],
+
+        data["nom_entreprise"],
+        data["adresse"],
+        data["email"],
+        data["telephone"],
+        data["devise"],
+        data["logo_path"]
     ))
 
     conn.commit()

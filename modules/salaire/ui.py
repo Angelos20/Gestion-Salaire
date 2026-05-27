@@ -1,3 +1,4 @@
+#ui salaire
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QHeaderView, QTableWidget, QTableWidgetItem, QFrame, QStackedWidget,
@@ -5,13 +6,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-
+from modules.dashboard.controller import log_activite
 from modules.salaire.avance_conge import AvanceCongeForm
 from modules.salaire.model import get_employes, get_employe_by_id, calculer_salaire_complet, get_conges, get_avances, enregistrer_salaire
 from modules.salaire.controller import generer_bulletin_pdf
 from modules.salaire.model import get_salaire_paye
 from configuration.database import get_connection
 from datetime import datetime
+from configuration.audit_model import AuditModel
+from configuration.security import get_user
 
 
 # ─────────────────────────────────────────────
@@ -20,6 +23,7 @@ from datetime import datetime
 class TableauSalaireView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.audit = AuditModel()
         self.setStyleSheet("background-color: #f8f9fa;")
         self.salaires = []
         self._build()
@@ -55,31 +59,39 @@ class TableauSalaireView(QWidget):
         search_layout.addWidget(self.search_input)
         search_layout.addStretch()
 
-        style_input = """
-                    QDateEdit, QComboBox {
-                        background-color: white;
-                        border: 1px solid #D1D5DB;
-                        border-radius: 6px;
-                        padding: 4px 8px;
-                        color: black;
-                    }
-                """
         # ─── FILTRE MOIS ───
         self.cb_mois = QComboBox()
+        self.cb_mois.setStyleSheet("""
+           QComboBox {
+                background-color: white;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                padding: 4px 8px;
+                color: black;
+            }
+        """)
         self.cb_mois.addItem("Tous les mois", "")
-        self.cb_mois.setStyleSheet(style_input)
+        current_year = datetime.now().strftime("%Y")
         for i in range(1, 13):
-            self.cb_mois.addItem(f"2026-{i:02d}", f"2026-{i:02d}")
+            self.cb_mois.addItem(f"{current_year}-{i:02d}", f"{current_year}-{i:02d}")
 
         # ─── FILTRE STATUT ───
         self.cb_statut = QComboBox()
-        self.cb_statut.setStyleSheet(style_input)
         self.cb_statut.addItems([
             "Tous",
             "EN_ATTENTE",
             "Approuvé",
             "Rejetté"
         ])
+        self.cb_statut.setStyleSheet("""
+                QComboBox {
+                background-color: white;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                padding: 4px 8px;
+                color: black;
+            }
+                """)
         self.cb_mois.currentIndexChanged.connect(self.appliquer_filtres)
         self.cb_statut.currentIndexChanged.connect(self.appliquer_filtres)
 
@@ -121,45 +133,46 @@ class TableauSalaireView(QWidget):
         self.table.setHorizontalHeaderLabels(columns)
         self.table.setStyleSheet("""
             QTableWidget {
-                background-color: white;
-                color: black;
-                border: 1px solid #C2D4E8;
-            }
+                        background-color: white;
+                        color: black;
+                        border: 1px solid #C2D4E8;
+                    }
 
-            QHeaderView::section {
-                background-color: #0A1628;
-                color: white;
-                padding: 8px;
-                font-weight: bold;
-                border: none;
-                font-family: sans serif;
-            }
+                    QHeaderView::section {
+                        background-color: #0A1628;
+                        color: white;
+                        font-weight: bold;
+                        border: none;
+                    }
 
-            QTableWidget::item {
-                padding: 5px;
-                border: none;
-            }
+                    QTableWidget::item {
+                        border: none;
+                    }
 
-            /* Supprime effet de focus */
-            QTableWidget::item:focus {
-                outline: none;
-            }
+                    /* Supprime effet de focus */
+                    QTableWidget::item:focus {
+                        outline: none;
+                    }
 
-            /* Sélection propre */
-            QTableWidget::item:selected {
-                background-color: #cce5ff;
-                color: black;
-            }
-        """)
+                    /* Sélection propre */
+                    QTableWidget::item:selected {
+                        background-color: #cce5ff;
+                        color: black;
+                    }
+                """)
 
         hdr = self.table.horizontalHeader()
         for i in range(len(columns)):
             hdr.setSectionResizeMode(i, QHeaderView.Stretch)
 
         table_wrap = QVBoxLayout()
-        table_wrap.setContentsMargins(20, 0, 20, 0)
+        table_wrap.setContentsMargins(10, 0, 10, 0)
         table_wrap.addWidget(self.table)
         layout.addLayout(table_wrap)
+
+    def actualiser(self):
+        self._charger_donnees()
+        self.load_salaire(self.salaires)
 
     def appliquer_filtres(self):
         texte = self.search_input.text().lower()
@@ -196,10 +209,6 @@ class TableauSalaireView(QWidget):
 # ✅ Charger données
 
     def _charger_donnees(self):
-        mois = datetime.now().strftime("%Y-%m")
-
-        print("DEBUG mois =", mois)
-
         self.salaires = get_salaire_paye(None)
 
         print("DEBUG résultats =", self.salaires)
@@ -250,7 +259,7 @@ class TableauSalaireView(QWidget):
             action_widget = QWidget()
             action_layout = QHBoxLayout()
             action_layout.setContentsMargins(0, 0, 0, 0)
-            action_layout.setSpacing(5)
+            action_layout.setSpacing(2)
 
             btn_approuver = QPushButton("Approuver")
             btn_rejetter = QPushButton("Rejetter")
@@ -260,19 +269,19 @@ class TableauSalaireView(QWidget):
                     ["#4da6ff", "#6699cc"]
             ):
                 btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {color};
-                        color: white;
-                        border-radius: 5px;
-                        height: 40px;
-                        font-weight: bold;
-                        font-size: 13px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: #004c99;
-                    }}
-                """)
-
+                                    QPushButton {{
+                                        background-color: {color};
+                                        color: white;
+                                        padding: 0;
+                                        border-radius: 5px;
+                                        height: 40px;
+                                        font-weight: bold;
+                                        font-size: 11px;
+                                    }}
+                                    QPushButton:hover {{
+                                        background-color: #004c99;
+                                    }}
+                                """)
             # ✅ ID correct
             emp_id = emp.get("id")
             mois = emp["mois"]
@@ -285,6 +294,35 @@ class TableauSalaireView(QWidget):
             btn_rejetter.clicked.connect(
                 self.make_handler(emp_id, mois, "Rejetté", action_layout)
             )
+
+            # ✅ Désactivation permanente si déjà traité
+            if emp["statut"] != "EN_ATTENTE":
+                btn_approuver.setEnabled(False)
+                btn_rejetter.setEnabled(False)
+
+                btn_approuver.setStyleSheet("""
+                    QPushButton {
+                        background-color: #cccccc;
+                        color: #666666;
+                        border-radius: 5px;
+                        padding:0;
+                        height: 30px;
+                        font-weight: bold;
+                        font-size: 11px;
+                    }
+                """)
+
+                btn_rejetter.setStyleSheet("""
+                    QPushButton {
+                        background-color: #cccccc;
+                        color: #666666;
+                        border-radius: 5px;
+                        padding:0;
+                        height: 30px;
+                        font-weight: bold;
+                        font-size: 11px;
+                    }
+                """)
 
             action_layout.addWidget(btn_approuver)
             action_layout.addWidget(btn_rejetter)
@@ -300,45 +338,50 @@ class TableauSalaireView(QWidget):
 
     def handle_action(self, emp_id, mois, statut, layout):
 
+        user = get_user()
+
         conn = get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
-                       UPDATE salaire
-                       SET statut = ?
-                       WHERE employe_id = ?
-                         AND mois = ?
-                       """, (statut, emp_id, mois))
+            UPDATE salaire
+            SET statut = ?
+            WHERE employe_id = ?
+            AND mois = ?
+        """, (statut, emp_id, mois))
 
         conn.commit()
+
+        # 🔥 LOG ACTIVITE (comme avance_congé)
+        log_activite(
+            f"Validation salaire {statut} - employé {emp_id} ({mois})",
+            module="salaire",
+            utilisateur=user["username"]
+        )
+
+        # 🔥 AUDIT TRAÇABILITÉ (IMPORTANT)
+        self.audit.log(
+            action="UPDATE",
+            table="salaire",
+            record_id=f"{emp_id}-{mois}",
+            old_data=None,
+            new_data={
+                "employe_id": emp_id,
+                "mois": mois,
+                "statut": statut
+            },
+            utilisateur=user["username"]
+        )
+
         conn.close()
 
-        QMessageBox.information(self, "Succès", f"{statut} enregistré")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Succès")
+        msg.setText(f"Validation salaire {statut} \n employé {emp_id}")
+        msg.setIcon(QMessageBox.Information)
+        msg.setStyleSheet(self.styled_messagebox())
+        msg.exec()
 
-        # 🔥 Désactiver exactement la bonne ligne
-        for row in range(self.table.rowCount()):
-
-            id_item = self.table.item(row, 0)
-            mois_item = self.table.item(row, 3)
-
-            if not id_item or not mois_item:
-                continue
-
-            if id_item.text() == str(emp_id) and mois_item.text() == mois:
-
-                widget = self.table.cellWidget(row, 9)
-
-                if widget:
-                    lay = widget.layout()
-
-                    for i in range(lay.count()):
-                        btn = lay.itemAt(i).widget()
-                        if btn:
-                            btn.setEnabled(False)
-
-                break
-
-        # 🔥 IMPORTANT : refresh UI depuis DB
         self._charger_donnees()
 
 
@@ -360,7 +403,6 @@ class TableauSalaireView(QWidget):
         ]
 
         self.load_salaire(resultats)
-        self.appliquer_filtres()
 
     def avance_conges(self):
         self.avance = AvanceCongeForm()
@@ -379,9 +421,34 @@ class TableauSalaireView(QWidget):
             return None
 
         return {
-            "emp_id": int(emp_id_item.text()),
+            "emp_id": (emp_id_item.text()),
             "mois": mois_item.text()
         }
+
+    def styled_messagebox(self):
+        return """
+        QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+
+        QLabel {
+            color: #0A1628;
+            font-size: 13px;
+        }
+
+        QPushButton {
+            background-color: #1E6FD9;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            min-width: 80px;
+        }
+
+        QPushButton:hover {
+            background-color: #2A85FF;
+        }
+        """
 
 # ─────────────────────────────────────────────
 # Formulaire de calcul
@@ -390,6 +457,7 @@ class FormCalculSalaireView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_view = parent
+        self.audit = AuditModel()
         self.setStyleSheet("background-color: #f8f9fa;")
         self._build()
 
@@ -402,6 +470,7 @@ class FormCalculSalaireView(QWidget):
         sb.setStyleSheet("""
             QDoubleSpinBox {
                 padding: 8px;
+                color : black;
                 border: 1px solid #C2D4E8;
                 border-radius: 5px;
                 background-color: white;
@@ -426,6 +495,7 @@ class FormCalculSalaireView(QWidget):
         return """
             QLineEdit, QComboBox {
                 padding: 8px;
+                color: black;
                 border: 1px solid #C2D4E8;
                 border-radius: 5px;
                 background-color: white;
@@ -453,6 +523,7 @@ class FormCalculSalaireView(QWidget):
         form_info.setLabelAlignment(Qt.AlignRight)
 
         self.cb_employe = QComboBox()
+        self.cb_employe.setStyleSheet(self.getStyleSheet())
         self.cb_employe.addItem("Tous les employés", None)
 
         employes = get_employes()
@@ -463,7 +534,7 @@ class FormCalculSalaireView(QWidget):
         mois = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
                 "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
         self.cb_periode.addItems(mois)
-        self.cb_periode.setStyleSheet(self._field_style())
+        self.cb_periode.setStyleSheet(self.getStyleSheet())
 
         for lbl_text, widget in [
             ("Employé :", self.cb_employe),
@@ -544,23 +615,29 @@ class FormCalculSalaireView(QWidget):
 
         for btn in [btn_reset, btn_valider]:
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #0A1640;
-                    color: white;
-                    font-weight: bold;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    font-family: sans serif;
-                }
-                QPushButton:hover { background-color:#1E6FD9; }
-            """)
+            btn.setStyleSheet(self.getStyleSheet())
 
         btn_reset.clicked.connect(self._reset)
 
         #Valider payement
         btn_valider.clicked.connect(self._valider)
 
+        btn_actualiser = QPushButton("Actualiser")
+        btn_actualiser.setCursor(Qt.PointingHandCursor)
+        btn_actualiser.setStyleSheet("""
+               QPushButton {
+                           background-color: #0A1640;
+                           color: white;
+                           font-weight: bold;
+                           padding: 10px 20px;
+                           border-radius: 5px;
+                           font-family: sans serif;
+                       }
+                       QPushButton:hover { background-color:#1E6FD9; }
+               """)
+
+        btn_actualiser.clicked.connect(self._charger_donnees)
+        btn_row.addWidget(btn_actualiser)
         btn_row.addWidget(btn_reset)
         btn_row.addWidget(btn_valider)
         main.addLayout(btn_row)
@@ -572,6 +649,8 @@ class FormCalculSalaireView(QWidget):
 
         # ── Connexions
         self.cb_employe.currentIndexChanged.connect(self._charger_donnees)
+        self.cb_periode.currentIndexChanged.connect(self._charger_donnees)
+
         self.sb_bonus.valueChanged.connect(self._calculer_auto)
         self.sb_autres_primes.valueChanged.connect(self._calculer_auto)
         self.sb_autres_ret.valueChanged.connect(self._calculer_auto)
@@ -592,32 +671,48 @@ class FormCalculSalaireView(QWidget):
 
         print("DATA:", data)
 
-        self.salaire_base = data["base"]
-        self.retenues_auto = data["deductions"]
+        def to_float(x):
+            try:
+                return float(str(x).replace(" ", "").replace(",", "."))
+            except:
+                return 0.0
 
-        self.avances = data["avances"]
-        self.conges = data["conges"]
+        self.salaire_base = to_float(data["base"])
+        self.retenues_auto = to_float(data["deductions"])
+
+        self.avances = to_float(data["avances"])
+        self.conges = to_float(data["conges"])
+
 
         self.lbl_avances.setText(f"{self.avances:,.0f} Ar")
         self.lbl_conge.setText(f"{self.conges:,.0f} Ar")
-
-        print(get_avances(1, "2026-01"))
-        print(get_conges(1, "2026-01", 1000000))
-
+        self.salaire_reel = to_float(data["salaire_reel"])
         self._calculer_auto()
 
     def _calculer_auto(self):
-        if not hasattr(self, "salaire_base"):
+        if not hasattr(self, "salaire_reel"):
             return
+
+        def safe(x):
+            try:
+                return float(str(x).replace(" ", "").replace(",", "."))
+            except:
+                return 0.0
+
+        salaire_reel = safe(self.salaire_reel)
+        retenues_auto = safe(self.retenues_auto)
+        avances = safe(self.avances)
+        conges = safe(self.conges)
 
         primes = self.sb_bonus.value() + self.sb_autres_primes.value()
         autres_ret = self.sb_autres_ret.value()
 
-        total_deductions = self.retenues_auto + self.avances + self.conges + autres_ret
+        total_deductions = retenues_auto + avances + conges + autres_ret
 
-        net = self.salaire_base + primes - total_deductions
+        net = salaire_reel + primes - total_deductions
+        net = max(0, net)
 
-        self.lbl_net_valeur.setText(f"{net:,.2f} Ar")
+        self.lbl_net_valeur.setText(f"{net:,.0f} Ar")
 
 
     def _reset(self):
@@ -629,33 +724,52 @@ class FormCalculSalaireView(QWidget):
     def _valider(self):
         employe_id = self.cb_employe.currentData()
         if employe_id is None:
-            QMessageBox.warning(self, "Erreur", "Sélectionnez un employé")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Sélectionner un employé")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
             return
 
         mois_sql = f"2026-{self.cb_periode.currentIndex() + 1:02d}"
 
         data = calculer_salaire_complet(employe_id, mois_sql)
         if not data:
-            QMessageBox.warning(self, "Erreur", "Impossible de calculer le salaire")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Impossible de calculer le salaire")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
             return
+
+        # ✅ NORMALISATION DES TYPES (IMPORTANT)
+        def to_float(x):
+            try:
+                return float(str(x).replace(" ", "").replace(",", "."))
+            except:
+                return 0.0
 
         primes = self.sb_bonus.value() + self.sb_autres_primes.value()
         autres_ret = self.sb_autres_ret.value()
 
-        total_deductions = (
-                data["deductions"] +
-                data["avances"] +
-                data["conges"] +
-                autres_ret
-        )
+        deductions_auto = to_float(data.get("deductions"))
+        avances = to_float(data.get("avances"))
+        conges = to_float(data.get("conges"))
+        salaire_reel = to_float(data.get("salaire_reel"))
+        base = to_float(data.get("base"))
 
-        net = data["base"] + primes - total_deductions
+        total_deductions = deductions_auto + avances + conges + autres_ret
+
+        net = salaire_reel + primes - total_deductions
+        net = max(0, net)
 
         enregistrer_salaire(
             employe_id,
             mois_sql,
             {
-                "base": data["base"],
+                "base": base,
                 "primes": primes,
                 "deductions": total_deductions,
                 "net": net,
@@ -663,10 +777,110 @@ class FormCalculSalaireView(QWidget):
             }
         )
 
-        QMessageBox.information(self, "Succès", "Salaire enregistré (EN_ATTENTE)")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Succès")
+        msg.setText(f"Salaire de {employe_id} enregistré (EN ATTENTE)")
+        msg.setStyleSheet(self.styled_messagebox())
+        msg.exec()
+
+        user = get_user()
+
+        log_activite(
+            f"Enregistrement salaire employé {employe_id}",
+            module="salaire",
+            utilisateur=user["username"]
+        )
+
+        self.audit.log(
+            action="INSERT",
+            table="salaire",
+            record_id=f"{employe_id}-{mois_sql}",
+            old_data=None,
+            new_data={
+                "employe_id": employe_id,
+                "mois": mois_sql,
+                "base": base,
+                "primes": primes,
+                "deductions": total_deductions,
+                "net": net,
+                "statut": "EN_ATTENTE"
+            },
+            utilisateur=user["username"]
+        )
+
         self.parent().parent().vue_tableau._charger_donnees()
         self.parent_view.stack.setCurrentIndex(0)
 
+    def getStyleSheet(self):
+        return """
+        QPushButton {
+            background-color: #0A1640;
+            color: white;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+
+        QPushButton:hover {
+            background-color: #1E6FD9;
+        }
+
+        QLabel {
+            color: #0A1628;
+            font-family: sans-serif;
+        }
+
+        QLineEdit, QComboBox, QDoubleSpinBox {
+            padding: 8px;
+            border: 1px solid #C2D4E8;
+            border-radius: 5px;
+            background-color: white;
+            font-family: sans-serif;
+            color: black;
+        }
+
+        QTableWidget {
+            background-color: white;
+            color: black;
+            border: 1px solid #C2D4E8;
+        }
+
+        QHeaderView::section {
+            background-color: #0A1628;
+            color: white;
+            font-weight: bold;
+            border: none;
+        }
+        QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+        """
+    def styled_messagebox(self):
+        return """
+            QMessageBox {
+                background-color: #EDF3FB;
+                font-size: 13px;
+            }
+
+            QLabel {
+                color: #0A1628;
+                font-size: 13px;
+            }
+
+            QPushButton {
+                background-color: #1E6FD9;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 6px;
+                min-width: 80px;
+            }
+
+            QPushButton:hover {
+                background-color: #2A85FF;
+            }
+            """
 # ─────────────────────────────────────────────
 # Vue principale avec QStackedWidget
 # ─────────────────────────────────────────────
@@ -674,6 +888,7 @@ class CalculSalaireView(QWidget):
     def __init__(self, parent=None, controller=None):
         super().__init__(parent)
         self.controller = controller
+        self.audit = AuditModel()
         self.setStyleSheet("background-color: #f8f9fa;")
         self._build()
 
@@ -730,17 +945,7 @@ class CalculSalaireView(QWidget):
 
         for btn in [btn_export, btn_generer]:
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #0A1640;
-                    color: white;
-                    font-weight: bold;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    font-family: sans serif;
-                }
-                QPushButton:hover { background-color:#1E6FD9; }
-            """)
+            btn.setStyleSheet(self.getStyleSheet())
 
         btn_generer.clicked.connect(self.generer_depuis_table)
 
@@ -757,12 +962,22 @@ class CalculSalaireView(QWidget):
         data = self.vue_tableau.get_selected_row_data()
 
         if not data:
-            QMessageBox.warning(self, "Erreur", "Veuillez sélectionner une ligne")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Veuillez sélectionner au moins une ligne")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.getStyleSheet())
+            msg.exec_()
             return
 
         emp = get_employe_by_id(data["emp_id"])
         if not emp:
-            QMessageBox.warning(self, "Erreur", "Employé introuvable")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText(f"Employé {emp} introuvable")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.getStyleSheet())
+            msg.exec_()
             return
 
         mois_sql = data["mois"]
@@ -770,10 +985,16 @@ class CalculSalaireView(QWidget):
         salaire = calculer_salaire_complet(data["emp_id"], mois_sql)
         if not salaire:
             QMessageBox.warning(self, "Erreur", "Calcul impossible")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Impossible de calculer")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.getStyleSheet())
+            msg.exec_()
             return
 
         # 📂 Documents par défaut
-        default_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        default_dir = os.path.join(os.path.expanduser("~"), "Documents")
         default_file = os.path.join(
             default_dir,
             f"BULLETIN_{emp[0]}_{mois_sql}.pdf"
@@ -788,6 +1009,8 @@ class CalculSalaireView(QWidget):
 
         if not file_path:
             return
+        if not file_path.endswith(".pdf"):
+            file_path += ".pdf"
 
         # ✅ DATA PROPRE ET COMPLET
         paiement_data = {
@@ -810,9 +1033,28 @@ class CalculSalaireView(QWidget):
             filename=file_path
         )
 
-        QMessageBox.information(self, "Succès", "Bulletin généré avec succès")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Succès")
+        msg.setText(f"Bulletin de {emp[2]} généré dans :\n{file_path}")
+        msg.setIcon(QMessageBox.Information)
+        msg.setStyleSheet(self.getStyleSheet())
+        msg.exec_()
+        user = get_user()
 
-        QMessageBox.information(self, "Succès", f"Bulletin généré :\n{file_path}")
+        log_activite(
+            f"Génération bulletin {emp[1]} ({emp[0]})",
+            module="salaire",
+            utilisateur=user["username"]
+        )
+
+        self.audit.log(
+            action="EXPORT",
+            table="bulletin",
+            record_id=f"{emp[0]}-{mois_sql}",
+            old_data=None,
+            new_data=paiement_data,
+            utilisateur=user["username"]
+        )
     def _toggle_vue(self, checked: bool):
         if checked:
             self.stack.setCurrentIndex(1)
@@ -826,22 +1068,22 @@ class CalculSalaireView(QWidget):
     def exporter_liste_excel(self):
         from openpyxl import Workbook
         from PySide6.QtWidgets import QFileDialog
-        from PySide6.QtCore import QStandardPaths
         import os
 
         # 📂 dossier Documents
-        default_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
-        default_file = os.path.join(default_dir, "liste_salaires.xlsx")
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Enregistrer le fichier Excel",
-            default_file,
+            os.path.join(os.path.expanduser("~"), "Documents"),
             "Excel Files (*.xlsx)"
         )
 
         if not file_path:
             return
+
+        if not file_path.endswith(".xlsx"):
+            file_path += ".xlsx"
 
         wb = Workbook()
         ws = wb.active
@@ -866,4 +1108,72 @@ class CalculSalaireView(QWidget):
 
         wb.save(file_path)
 
-        QMessageBox.information(self, "Succès", f"Export Excel terminé :\n{file_path}")
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Succès")
+        msg.setText(f"Export Excel terminé :\n{file_path}")
+        msg.setIcon(QMessageBox.Information)
+        msg.setStyleSheet(self.getStyleSheet())
+        msg.exec_()
+        user = get_user()
+
+        log_activite(
+            "Export Excel des salaires",
+            module="salaire",
+            utilisateur=user["username"]
+        )
+
+        self.audit.log(
+            action="EXPORT",
+            table="salaire",
+            record_id="ALL",
+            old_data=None,
+            new_data={"format": "xlsx"},
+            utilisateur=user["username"]
+        )
+
+    def getStyleSheet(self):
+        return """
+         QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+        
+        QPushButton {
+            background-color: #0A1640;
+            color: white;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+
+        QPushButton:hover {
+            background-color: #1E6FD9;
+        }
+
+        QLabel {
+            color: #0A1628;
+            font-family: sans-serif;
+        }
+
+        QLineEdit, QComboBox, QDoubleSpinBox {
+            padding: 8px;
+            border: 1px solid #C2D4E8;
+            border-radius: 5px;
+            background-color: white;
+            font-family: sans-serif;
+        }
+
+        QTableWidget {
+            background-color: white;
+            color: black;
+            border: 1px solid #C2D4E8;
+        }
+
+        QHeaderView::section {
+            background-color: #0A1628;
+            color: white;
+            font-weight: bold;
+            border: none;
+        }
+        """

@@ -1,3 +1,4 @@
+#controller presence
 from datetime import datetime
 
 def calcul_heures(heure_entree, heure_sortie):
@@ -10,21 +11,3 @@ def calcul_heures(heure_entree, heure_sortie):
 
     diff = h2 - h1
     return round(diff.total_seconds() / 3600, 2)
-
-
-def enregistrer_presence(employe_id, date, heure_entree, heure_sortie, statut):
-    from configuration.database import get_connection
-
-    heures = calcul_heures(heure_entree, heure_sortie)
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO presence 
-        (employe_id, date, heure_entree, heure_sortie, heure_travaillees, statut)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (employe_id, date, heure_entree, heure_sortie, heures, statut))
-
-    conn.commit()
-    conn.close()

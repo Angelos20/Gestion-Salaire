@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QFrame, QLabel, QVBoxLayout,
+    QApplication, QWidget, QFrame, QLabel, QVBoxLayout,QMainWindow,
     QHBoxLayout, QStackedWidget, QPushButton, QLineEdit,QMessageBox,
     QCheckBox, QTimeEdit, QFormLayout, QDoubleSpinBox, QTabWidget, QFileDialog
 )
@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QPoint, QSize, QTime
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QPen, QCursor, QPainterPath, QPixmap
 )
+import os
 import sys
 from modules.dashboard.ui import DashboardPage
 from modules.employe.controller import EmployeController
@@ -79,8 +80,8 @@ class RoundedButton(QWidget):
         self.btn_icon    = icon
         self.command     = command
         self.radius      = radius
-        self.bg_def      = ACCENT if active else bg
-        self.bg_hover    = hover_bg
+        self.bg_def      = hover_bg if active else ACCENT
+        self.bg_hover    = bg
         self.fg          = fg
         self.active      = active
         self.on_sidebar  = on_sidebar
@@ -91,13 +92,24 @@ class RoundedButton(QWidget):
 
     def set_active(self, active):
         self.active = active
-        self.bg_def = ACCENT if active else ("#0D1F3C" if self.on_sidebar else BG_CARD)
+
+        # ACTIVE = ancienne couleur hover
+        if active:
+            self.bg_def = ACCENT_LIGHT
+
+        # INACTIVE = ancienne couleur normale
+        else:
+            self.bg_def = "#0D1F3C" if self.on_sidebar else BG_CARD
+
         self._current_bg = self.bg_def
         self.update()
 
     def enterEvent(self, event):
         self._hovered = True
-        self._current_bg = self.bg_hover
+
+        # HOVER = ancienne couleur inactive
+        self._current_bg = "#0D1F3C" if self.on_sidebar else BG_CARD
+
         self.update()
 
     def leaveEvent(self, event):
@@ -146,16 +158,17 @@ class RoundedButton(QWidget):
         cy = (h - 4) // 2
 
         if self.btn_icon:
-            # Icone
-            p.setFont(QFont("Segoe UI Symbol", 11, QFont.Bold))
-            p.drawText(cx - 55, 0, 40, h - 4,
+            # Icône centrée
+            p.setFont(QFont("Segoe UI Symbol", 14, QFont.Bold))
+            p.drawText(0, 0, w, h // 2,
                        Qt.AlignCenter, self.btn_icon)
-            # Texte
-            p.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            p.drawText(cx - 10, 0, 80, h - 4,
+
+            # Texte centré en dessous
+            p.setFont(QFont("Segoe UI", 15, QFont.Bold))
+            p.drawText(0, h // 2, w, h // 2,
                        Qt.AlignCenter, self.btn_text)
         else:
-            p.setFont(QFont("Segoe UI", 10, QFont.Bold))
+            p.setFont(QFont("Segoe UI", 15, QFont.Bold))
             p.drawText(0, 0, w - 4, h - 4,
                        Qt.AlignCenter, self.btn_text)
         p.end()
@@ -248,15 +261,14 @@ class KpiCard(QFrame):
 # ══════════════════════════════════════════════════════════════════════════════
 # APPLICATION PRINCIPALE
 # ══════════════════════════════════════════════════════════════════════════════
-class App(QWidget):
+class App(QMainWindow):
     def __init__(self, controller: EmployeController):
         super().__init__()
         self.controller = controller
-        self.setWindowTitle("GRH Pro")
-        self.setFixedSize(1850, 950)
+        self.setWindowTitle("Gestion Salaire")
+        self.showMaximized()
         self.setStyleSheet(f"QWidget {{ background-color: {BG_DARK}; }}")
         self._drag_pos = None
-        self._center()
         self._nav_buttons = {}
         self._current_page = "dashboard"
         self._build_ui()
@@ -265,12 +277,6 @@ class App(QWidget):
             module="app",
             utilisateur="system"
         )
-
-    def _center(self):
-        screen = QApplication.primaryScreen().geometry()
-        x = (screen.width()  - 1850) // 2
-        y = (screen.height() - 950)  // 2
-        self.move(x, y)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -284,7 +290,10 @@ class App(QWidget):
         self._drag_pos = None
 
     def _build_ui(self):
-        root_layout = QHBoxLayout(self)
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        root_layout = QHBoxLayout(central)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
@@ -294,96 +303,300 @@ class App(QWidget):
         main = self._build_main()
         root_layout.addWidget(main, 1)
 
+    def make_round_pixmap(self, image_path, size=80):
+
+        pixmap = QPixmap(image_path)
+
+        if pixmap.isNull():
+            return QPixmap()
+
+        # Redimensionnement
+        pixmap = pixmap.scaled(
+            size,
+            size,
+            Qt.KeepAspectRatioByExpanding,
+            Qt.SmoothTransformation
+        )
+
+        # Pixmap transparent final
+        rounded = QPixmap(size, size)
+        rounded.fill(Qt.transparent)
+
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        path = QPainterPath()
+        path.addEllipse(0, 0, size, size)
+
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, pixmap)
+
+        painter.end()
+
+        return rounded
+
     # ══════════════════════════════════════════════════════════════════════
     # SIDEBAR
     # ══════════════════════════════════════════════════════════════════════
     def _build_sidebar(self):
+
+        config = get_config()
+
+        nom_entreprise = "Entreprise"
+        logo_path = ""
+
+        try:
+            nom_entreprise = config["nom_entreprise"] or "Entreprise"
+            logo_path = config["logo_path"] or ""
+        except:
+            nom_entreprise = "Entreprise"
+            logo_path = ""
+
         sb = QFrame()
-        sb.setFixedWidth(240)
-        sb.setStyleSheet(f"QFrame {{ background-color: {BG_SIDEBAR}; }}")
+        sb.setFixedWidth(250)
+
+        sb.setStyleSheet(f"""
+            QFrame {{
+                background-color: {BG_SIDEBAR};
+            }}
+
+            QPushButton {{
+                background-color: #0D1F3C;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 12px;
+                text-align: left;
+                font-size: 14px;
+                font-weight: bold;
+                font-family: Segoe UI;
+            }}
+
+            QPushButton:hover {{
+                background-color: {ACCENT_LIGHT};
+            }}
+
+            QPushButton:checked {{
+                background-color: {ACCENT_LIGHT};
+                border-left: 4px solid #2A85FF;
+            }}
+        """)
+
         layout = QVBoxLayout(sb)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
-        # ── Header / Logo
-        header = QWidget()
-        header.setStyleSheet(f"background-color: {BG_SIDEBAR};")
-        h_layout = QVBoxLayout(header)
-        h_layout.setAlignment(Qt.AlignCenter)
-        h_layout.setContentsMargins(0, 20, 0, 10)
+        # ─────────────────────────
+        # LOGO
+        # ─────────────────────────
+        self.logo_label = QLabel()
 
-        logo = LogoWidget()
-        h_layout.addWidget(logo, 0, Qt.AlignCenter)
+        self.logo_label.setFixedSize(90, 90)
+        self.logo_label.setAlignment(Qt.AlignCenter)
 
-        title_lbl = QLabel("G.S")
-        title_lbl.setFont(QFont("Calibri", 15, QFont.Bold))
-        title_lbl.setStyleSheet(f"color: {SB_TEXT}; background: transparent;")
-        title_lbl.setAlignment(Qt.AlignCenter)
-        h_layout.addWidget(title_lbl)
+        self.logo_label.setStyleSheet("""
+            QLabel{
+                background-color: white;
+                border-radius: 45px;
+                border: 3px solid #1E6FD9;
+                padding: 2px;
+            }
+        """)
 
+        if logo_path and os.path.exists(logo_path):
+            pix = self.make_round_pixmap(logo_path, 80)
+            self.logo_label.setPixmap(pix)
+
+        layout.addWidget(self.logo_label, 0, Qt.AlignCenter)
+
+        # ─────────────────────────
+        # NOM ENTREPRISE
+        # ─────────────────────────
+        self.title_lbl = QLabel(nom_entreprise)
+        self.title_lbl.setFont(QFont("Calibri", 16, QFont.Bold))
+
+        self.title_lbl.setStyleSheet("""
+            color: white;
+            background: transparent;
+        """)
+
+        self.title_lbl.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(self.title_lbl)
+
+        # Sous titre
         sub_lbl = QLabel("Gestion des salaires")
-        sub_lbl.setFont(make_font(9))
-        sub_lbl.setStyleSheet(f"color: {SB_SUBTEXT}; background: transparent;")
+
+        sub_lbl.setStyleSheet("""
+            color: #A8C0D6;
+            background: transparent;
+            font-size: 11px;
+        """)
+
         sub_lbl.setAlignment(Qt.AlignCenter)
-        h_layout.addWidget(sub_lbl)
 
-        layout.addWidget(header)
-        layout.addWidget(make_hsep(color="#1E3A5F"))
+        layout.addWidget(sub_lbl)
 
-        nav_items = [
-            (ICON_DASHBOARD, "Dashboard",  "dashboard"),
-            (ICON_EMPLOYES,  "Employes",   "employes"),
-            (ICON_SALAIRES,  "Salaires",   "salaires"),
-            (ICON_PRESENCES, "Presences",  "presences"),
-        ]
-        for icon, label, key in nav_items:
-            active = (key == self._current_page)
-            btn = RoundedButton(sb, text=label, icon=icon,
-                                width=208, height=46, radius=10,
-                                bg="#0D1F3C",
-                                hover_bg=ACCENT_LIGHT,
-                                active=active,
-                                on_sidebar=True,
-                                command=lambda k=key: self._navigate(k))
-            wrapper = QWidget()
-            wrapper.setStyleSheet(f"background: transparent;")
-            wl = QHBoxLayout(wrapper)
-            wl.setContentsMargins(16, 3, 16, 3)
-            wl.addWidget(btn)
-            layout.addWidget(wrapper)
-            self._nav_buttons[key] = btn
+        layout.addSpacing(20)
 
-        layout.addWidget(make_hsep(color="#1E3A5F"))
+        # ─────────────────────────
+        # MENU
+        # ─────────────────────────
+        self.btn_dashboard = QPushButton(f"{ICON_DASHBOARD}  Dashboard")
+        self.btn_employes = QPushButton(f"{ICON_EMPLOYES}  Employés")
+        self.btn_salaires = QPushButton(f"{ICON_SALAIRES}  Salaires")
+        self.btn_presences = QPushButton(f"{ICON_PRESENCES}  Présences")
+
+        for btn in [
+            self.btn_dashboard,
+            self.btn_employes,
+            self.btn_salaires,
+            self.btn_presences
+        ]:
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setMinimumHeight(48)
+
+        self.btn_dashboard.setChecked(True)
+
+        self.btn_dashboard.clicked.connect(
+            lambda: self._navigate("dashboard"),
+            self.refresh_sidebar()
+        )
+
+        self.btn_employes.clicked.connect(
+            lambda: self._navigate("employes"),
+            self.refresh_sidebar()
+        )
+
+        self.btn_salaires.clicked.connect(
+            lambda: self._navigate("salaires"),
+            self.refresh_sidebar()
+        )
+
+        self.btn_presences.clicked.connect(
+            lambda: self._navigate("presences"),
+            self.refresh_sidebar()
+        )
+
+        layout.addWidget(self.btn_dashboard)
+        layout.addWidget(self.btn_employes)
+        layout.addWidget(self.btn_salaires)
+        layout.addWidget(self.btn_presences)
+
         layout.addStretch()
 
-        bottom_items = [
-            (ICON_SETTINGS, "Parametres", "#0D1F3C", ACCENT_LIGHT, self._open_settings),
-            (ICON_QUIT,     "Quitter",    "#3A0A0A", "#C0392B",    self.close),
-        ]
-        for icon, label, col, hover, cmd in bottom_items:
-            btn = RoundedButton(sb, text=label, icon=icon,
-                                width=208, height=46, radius=10,
-                                bg=col, hover_bg=hover,
-                                on_sidebar=True,
-                                command=cmd)
-            wrapper = QWidget()
-            wrapper.setStyleSheet("background: transparent;")
-            wl = QHBoxLayout(wrapper)
-            wl.setContentsMargins(16, 3, 16, 3)
-            wl.addWidget(btn)
-            layout.addWidget(wrapper)
+        # ─────────────────────────
+        # BOTTOM BUTTONS
+        # ─────────────────────────
+        btn_settings = QPushButton(f"{ICON_SETTINGS}  Paramètres")
 
-        #layout.addStretch()
+        btn_settings.clicked.connect(self._open_settings)
 
-        version = QLabel("v1.0.0  -  2025")
-        version.setFont(make_font(9))
-        version.setStyleSheet(f"color: {SB_DIM}; background: transparent;")
+        btn_quit = QPushButton(f"{ICON_QUIT}  Quitter")
+
+        btn_quit.setStyleSheet("""
+            QPushButton{
+                background-color: #3A0A0A;
+                color: white;
+                border-radius: 10px;
+                padding: 12px;
+                font-weight: bold;
+            }
+
+            QPushButton:hover{
+                background-color: #C0392B;
+            }
+        """)
+
+        btn_quit.clicked.connect(self._confirm_quit)
+
+        layout.addWidget(btn_settings)
+        layout.addWidget(btn_quit)
+
+        # Version
+        version = QLabel("v1.0.0 - 2026")
+
+        version.setStyleSheet("""
+            color: #4A6080;
+            background: transparent;
+            font-size: 10px;
+        """)
+
         version.setAlignment(Qt.AlignCenter)
-        version.setContentsMargins(0, 0, 0, 12)
+
         layout.addWidget(version)
 
         return sb
 
+    def _confirm_quit(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Confirmation")
+        msg.setText("Voulez-vous vraiment quitter l'application ?")
+
+        msg.setIcon(QMessageBox.Warning)
+
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+
+        msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: #F6F8FB;
+                    color: #0A1640;
+                    font-size: 13px;
+                }
+
+                QLabel {
+                    color: #0A1640;
+                    font-weight: bold;
+                }
+
+                QPushButton {
+                    background-color: #0A1640;
+                    color: white;
+                    border-radius: 6px;
+                    padding: 6px 14px;
+                    font-weight: bold;
+                }
+
+                QPushButton:hover {
+                    background-color: #1E6FD9;
+                }
+
+                QPushButton:pressed {
+                    background-color: #163F7A;
+                }
+            """)
+
+        result = msg.exec()
+
+        if result == QMessageBox.Yes:
+            self.close()
+
+    def refresh_sidebar(self):
+
+        config = get_config()
+
+        try:
+            nom_entreprise = config["nom_entreprise"] or "Entreprise"
+            logo_path = config["logo_path"] or ""
+
+        except:
+            nom_entreprise = "Entreprise"
+            logo_path = ""
+
+        # nom
+        self.title_lbl.setText(nom_entreprise)
+
+        # logo
+        if logo_path and os.path.exists(logo_path):
+
+            pix = self.make_round_pixmap(logo_path, 80)
+
+            self.logo_label.setPixmap(pix)
+
+        else:
+            self.logo_label.clear()
     # ══════════════════════════════════════════════════════════════════════
     # ZONE PRINCIPALE
     # ══════════════════════════════════════════════════════════════════════
@@ -411,7 +624,7 @@ class App(QWidget):
 
         # ── Stacked pages
         self._stack = QStackedWidget()
-        self._stack.setStyleSheet(f"QWidget {{ background-color: {BG_DARK}; }}")
+        self._stack.setStyleSheet(f"QWidget {{ background-color: #1E6FD9; }}")
         layout.addWidget(self._stack, 1)
 
         self._pages = {}
@@ -439,7 +652,26 @@ class App(QWidget):
         self._page_title_lbl.setText(labels.get(key, key))
         for k, btn in self._nav_buttons.items():
             btn.set_active(k == key)
+
+        self.btn_dashboard.setChecked(False)
+        self.btn_employes.setChecked(False)
+        self.btn_salaires.setChecked(False)
+        self.btn_presences.setChecked(False)
+
+        if key == "dashboard":
+            self.btn_dashboard.setChecked(True)
+
+        elif key == "employes":
+            self.btn_employes.setChecked(True)
+
+        elif key == "salaires":
+            self.btn_salaires.setChecked(True)
+
+        elif key == "presences":
+            self.btn_presences.setChecked(True)
+
         self._stack.setCurrentWidget(self._pages[key])
+
         log_activite(
             f"Navigation vers {key}",
             module="ui",
@@ -477,7 +709,53 @@ class App(QWidget):
         self._settings_win.move(self.x() + 180, self.y() + 90)
         self._settings_win.show()
 
+        self._settings_win.destroyed.connect(
+            self.refresh_sidebar
+        )
 
+    def closeEvent(self, event):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Confirmation")
+        msg.setText("Voulez-vous vraiment quitter l'application ?")
+
+        msg.setIcon(QMessageBox.Warning)
+
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+
+        msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: #F6F8FB;
+                    color: #0A1640;
+                    font-size: 13px;
+                }
+
+                QLabel {
+                    color: #0A1640;
+                    font-weight: bold;
+                }
+
+                QPushButton {
+                    background-color: #0A1640;
+                    color: white;
+                    border-radius: 6px;
+                    padding: 6px 14px;
+                    font-weight: bold;
+                }
+
+                QPushButton:hover {
+                    background-color: #1E6FD9;
+                }
+
+                QPushButton:pressed {
+                    background-color: #163F7A;
+                }
+            """)
+
+        result = msg.exec()
+
+        if result == QMessageBox.Yes:
+            self.close()
 # ─── Widget cercle icone ──────────────────────────────────────────────────────
 class _IconCircle(QWidget):
     def __init__(self, sym, parent=None):

@@ -1,3 +1,4 @@
+#modules/dashboard/controller.py
 from configuration.database import get_connection
 from datetime import datetime
 
@@ -31,7 +32,7 @@ def get_kpis(date=None):
     depart = cursor.fetchone()[0]
 
     # Salaire
-    cursor.execute("SELECT SUM(salaire_base) FROM employes")
+    cursor.execute("SELECT COALESCE(SUM(salaire_base), 0) FROM employes")
     masse_salariale = cursor.fetchone()[0] or 0
 
     cursor.execute("SELECT AVG(salaire_base) FROM employes")

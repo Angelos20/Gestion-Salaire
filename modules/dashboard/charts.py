@@ -1,3 +1,4 @@
+#modules/dashboard/charts.py
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -38,8 +39,18 @@ class ChartCanvas(FigureCanvas):
 
         labels = ["Présents", "Absents", "Retards", "Departs précoces"]
         values = [present, absent, retard, depart]
+        values = [v if v is not None else 0 for v in values]
 
         self.bars = self.ax.bar(labels, values)
+        for bar in self.bars:
+            height = bar.get_height()
+            self.ax.text(
+                bar.get_x() + bar.get_width()/2,
+                height,
+                f"{int(height)}",
+                ha='center',
+                va='bottom'
+            )
 
         self.ax.set_title("Statut des employés")
         self.draw()
@@ -51,6 +62,15 @@ class ChartCanvas(FigureCanvas):
         values = [masse, paye]
 
         self.bars = self.ax.bar(labels, values)
+        for bar in self.bars:
+            height = bar.get_height()
+            self.ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                height,
+                f"{int(height)}",
+                ha='center',
+                va='bottom'
+            )
 
         self.ax.set_title("Analyse salariale")
         self.draw()
@@ -61,7 +81,28 @@ class ChartCanvas(FigureCanvas):
         labels = ["Présents", "Absents", "Retards", "Départs précoces"]
         values = [present, absent, retard, depart]
 
-        self.ax.pie(values, labels=labels, autopct="%1.1f%%")
+        # sécurité
+        values = [0 if v is None else v for v in values]
+
+        total = sum(values)
+
+        # 👉 CAS IMPORTANT : tout est à 0
+        if total == 0:
+            values = [0, 0, 0, 0]
+            self.ax.text(0, 0, "0%", ha='center', va='center', fontsize=14)
+            self.ax.set_title("Répartition (aucune donnée)")
+            self.draw()
+            return
+
+        def autopct(pct):
+            return f"{pct:.1f}%" if pct > 0 else "0%"
+
+        self.ax.pie(
+            values,
+            labels=labels,
+            autopct=autopct,
+            startangle=90
+        )
 
         self.ax.set_title("Répartition")
         self.draw()

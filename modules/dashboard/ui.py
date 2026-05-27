@@ -1,3 +1,4 @@
+#modules/dashboard/ui.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QGridLayout, QFrame, QGraphicsDropShadowEffect, QScrollArea, QDateEdit, QPushButton
@@ -70,6 +71,17 @@ class DashboardPage(QWidget):
 
         self.btn_actualiser = QPushButton("Actualiser")
         self.btn_actualiser.clicked.connect(self.rafraichir)
+        self.btn_actualiser.setStyleSheet("""QPushButton {
+                background-color: "#0A1640";
+                color: white;
+                font-weight: bold;
+                font-size : 15px ;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-family: sans-serif;
+            }
+        QPushButton:hover   { background-color:"#1E6FD9"; }
+        """)
 
         self.date_fin = QDateEdit()
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
@@ -93,27 +105,37 @@ class DashboardPage(QWidget):
         self.kpi_labels = []
 
         kpi_data = [
-            ("👥", "Total employés"),
-            ("💰", "Masse salariale"),
-            ("📉", "Salaire moyen"),
-            ("💵", "Total payé"),
+            ("👥", "Total employés", "#3B82F6"),
+            ("💰", "Masse salariale", "#10B981"),
+            ("📉", "Salaire moyen", "#F59E0B"),
+            ("💵", "Total payé", "#EF4444"),
         ]
 
-        for i, (icon, title) in enumerate(kpi_data):
+        for i, (icon, title, color) in enumerate(kpi_data):
             card = AnimatedCard()
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background-color: white;
+                    border-radius: 12px;
+                    border-left: 6px solid {color};
+                }}
+            """)
+
             layout = QVBoxLayout(card)
 
             icon_label = QLabel(icon)
             icon_label.setAlignment(Qt.AlignCenter)
             icon_label.setFont(QFont("Segoe UI Emoji", 42))
-            icon_label.setStyleSheet("color: #2563EB; margin-bottom: 6px;")
+            icon_label.setStyleSheet(f"color: {color};")
 
             value = QLabel("0")
             value.setAlignment(Qt.AlignCenter)
             value.setFont(QFont("Segoe UI", 20, QFont.Bold))
+            value.setStyleSheet(f"color: {color};")
 
             label = QLabel(title)
             label.setAlignment(Qt.AlignCenter)
+            label.setStyleSheet("color:#374151;")
 
             layout.addWidget(icon_label)
             layout.addWidget(value)
@@ -235,7 +257,7 @@ class DashboardPage(QWidget):
         ]
 
         if sum(pie_values) == 0:
-            pie_values = [1, 1, 1, 1]
+            pie_values = [0, 0, 0, 0]
 
         self.chart3.plot_pie(*pie_values)
 

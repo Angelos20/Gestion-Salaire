@@ -130,10 +130,23 @@ class PageSignUp(QWidget):
         poste = self.poste.currentText()
 
         if not all([nom, username, email, password]):
-            QMessageBox.warning(self, "Erreur", "Veuillez remplir tous les champs !")
+
+            msg = QMessageBox()
+            msg.setWindowTitle("Erreur")
+            msg.setText(f"Veuillez remplir tous les champs !")
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
+
             return
         if password != confirm_password:
-            QMessageBox.warning(self, "Erreur", "Les mots de passe ne correspondent pas !")
+
+            msg = QMessageBox()
+            msg.setWindowTitle("Erreur")
+            msg.setText("Les mots de passe ne sont pas identiques !")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
+
             return
 
         hashed_password = hash_password(password)  # ✅ Hash une seule fois ici
@@ -154,14 +167,26 @@ class PageSignUp(QWidget):
                 utilisateur=username
             )
 
-            QMessageBox.information(self, "Succès", f"Utilisateur '{username}' créé avec succès !")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Succès")
+            msg.setText(f"Utilisateur '{username}' créé avec succès !")
+            msg.setIcon(QMessageBox.Information)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
+
             from modules.auth.login import PageLogin
             self.login = PageLogin()
             self.login.show()
             self.close()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de créer l'utilisateur.\n{str(e)}")
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText(f"Impossible de créer l'utilisateur.\n{str(e)}")
+            msg.setIcon(QMessageBox.Critical)
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
             print("Erreur signup:", e)
 
     # ───────── PASSWORD TOGGLE ─────────
@@ -194,3 +219,28 @@ class PageSignUp(QWidget):
             delta = event.globalPosition().toPoint() - self.old_pos
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.old_pos = event.globalPosition().toPoint()
+
+    def styled_messagebox(self):
+        return """
+        QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+
+        QLabel {
+            color: #0A1628;
+            font-size: 13px;
+        }
+
+        QPushButton {
+            background-color: #1E6FD9;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            min-width: 80px;
+        }
+
+        QPushButton:hover {
+            background-color: #2A85FF;
+        }
+        """
