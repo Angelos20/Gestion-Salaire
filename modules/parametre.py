@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QFrame, QLabel, QVBoxLayout,
+    QComboBox, QWidget, QFrame, QLabel, QVBoxLayout,QHBoxLayout,
     QAbstractItemView, QTableWidgetItem, QPushButton,  QTextEdit,QLineEdit, QMessageBox,QTableWidget,
     QCheckBox, QTimeEdit, QFormLayout, QDoubleSpinBox, QTabWidget, QFileDialog,QHeaderView
 )
@@ -10,7 +10,7 @@ from PySide6.QtGui import (
 from configuration.database import get_config, update_config, get_connection
 from modules.dashboard.controller import log_activite
 from configuration.audit_model import AuditModel
-from configuration.security import get_user
+from configuration.security import get_user,hash_password
 import os
 import shutil
 
@@ -477,59 +477,21 @@ class ConfigRHView(QWidget):
 
         self._load_users()
 
+    from PySide6.QtWidgets import QDialog
+
     def _update_user(self):
+
         row = self.table_users.currentRow()
         if row == -1:
             return
 
-        user = get_user()
-
         user_id = self.table_users.item(row, 0).text()
 
-        old_data = None  # optionnel (tu peux charger avant UPDATE si tu veux)
-
-        conn = get_connection()
-        cur = conn.cursor()
-
-        cur.execute("""
-            UPDATE utilisateur
-            SET nom=?, username=?, email=?, poste=?
-            WHERE id=?
-        """, (
-            self.table_users.item(row, 1).text(),
-            self.table_users.item(row, 2).text(),
-            self.table_users.item(row, 3).text(),
-            self.table_users.item(row, 4).text(),
-            user_id
-        ))
-
-        conn.commit()
-        conn.close()
-
-        new_data = {
-            "nom": self.table_users.item(row, 1).text(),
-            "username": self.table_users.item(row, 2).text(),
-            "email": self.table_users.item(row, 3).text(),
-            "poste": self.table_users.item(row, 4).text()
-        }
-
-        log_activite(
-            f"Modification utilisateur ID {user_id}",
-            module="config",
-            utilisateur=user["username"]
+        self.edit_window = UserEditorWindow(
+            user_id=user_id,
+            refresh_callback=self._load_users
         )
-
-        self.audit.log(
-            action="UPDATE",
-            table="utilisateur",
-            record_id=user_id,
-            old_data=old_data,
-            new_data=new_data,
-            utilisateur=user["username"]
-        )
-
-        self._load_users()
-
+        self.edit_window.show()
     # -------------------------ACTIVITES----------------------
     def _tab_activite(self):
         tab = QWidget()
@@ -771,3 +733,305 @@ class ConfigRHView(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", str(e))
+
+class UserEditorWindow(QWidget):
+
+    def __init__(self, user_id=None, refresh_callback=None):
+        super().__init__()
+
+        self.user_id = user_id
+        self.refresh_callback = refresh_callback
+        self.audit = AuditModel()
+
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        self.old_pos = None
+
+        self._apply_style()
+        self._build()
+
+        if self.user_id:
+            self._load_user()
+
+    # ───────────────────────── STYLE GLOBAL ─────────────────────────
+    def _apply_style(self):
+        self.setStyleSheet("""
+            QWidget{
+                background: transparent;
+                font-family: Segoe UI;
+            }
+
+            QFrame{
+                background-color: white;
+                border-radius: 20px;
+            }
+
+            QLabel{
+                color: #0A1628;
+                font-size: 13px;
+                font-weight: bold;
+            }
+
+            QLineEdit, QComboBox{
+                background-color: #F6F8FB;
+                border: 1px solid #C2D4E8;
+                border-radius: 8px;
+                padding: 8px;
+                min-height: 20px;
+            }
+
+            QLineEdit:focus, QComboBox:focus{
+                border: 2px solid #1E6FD9;
+            }
+
+            QPushButton{
+                background-color: #0A1628;
+                color: white;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+            }
+
+            QPushButton:hover{
+                background-color: #1E6FD9;
+            }
+        """)
+
+    # ───────────────────────── MESSAGEBOX STYLE ─────────────────────────
+    def styled_messagebox(self):
+        return """
+        QMessageBox {
+            background-color: #EDF3FB;
+            font-size: 13px;
+        }
+        QLabel {
+            color: #0A1628;
+        }
+        QPushButton {
+            background-color: #1E6FD9;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+        QPushButton:hover {
+            background-color: #2A85FF;
+        }
+        """
+
+    # ───────────────────────── UI ─────────────────────────
+    def _build(self):
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setAlignment(Qt.AlignCenter)
+
+        self.card = QFrame()
+        self.card.setFixedWidth(460)
+
+        card_layout = QVBoxLayout(self.card)
+        card_layout.setSpacing(10)
+
+        # TOP BAR
+        top_layout = QHBoxLayout()
+        top_layout.addStretch()
+
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(30, 30)
+        btn_close.clicked.connect(self.close)
+        btn_close.setStyleSheet("background:transparent;border:none;font-size:16px;")
+        top_layout.addWidget(btn_close)
+
+        # TITLE
+        self.titre = QLabel("Modifier utilisateur" if self.user_id else "Ajouter utilisateur")
+        self.titre.setAlignment(Qt.AlignCenter)
+
+        # INPUTS
+        self.nom = QLineEdit()
+        self.nom.setPlaceholderText("Nom complet")
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Nom d'utilisateur")
+
+        self.email = QLineEdit()
+        self.email.setPlaceholderText("Email")
+
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("Mot de passe")
+        self.password.setEchoMode(QLineEdit.Password)
+
+        self.conf_password = QLineEdit()
+        self.conf_password.setPlaceholderText("Confirmer mot de passe")
+        self.conf_password.setEchoMode(QLineEdit.Password)
+
+        self.poste = QComboBox()
+        self.poste.addItems([
+            "Directeur", "Manager", "Employé",
+            "Comptable", "RH", "Administrateur"
+        ])
+
+        # BUTTONS
+        btn_layout = QHBoxLayout()
+
+        self.btn_save = QPushButton("💾 Enregistrer")
+        self.btn_save.clicked.connect(self._save)
+
+        self.btn_cancel = QPushButton("Annuler")
+        self.btn_cancel.clicked.connect(self.close)
+
+        btn_layout.addWidget(self.btn_save)
+        btn_layout.addWidget(self.btn_cancel)
+
+        # ASSEMBLAGE
+        card_layout.addLayout(top_layout)
+        card_layout.addWidget(self.titre)
+        card_layout.addWidget(self.nom)
+        card_layout.addWidget(self.username)
+        card_layout.addWidget(self.email)
+        card_layout.addWidget(self.password)
+        card_layout.addWidget(self.conf_password)
+        card_layout.addWidget(self.poste)
+        card_layout.addLayout(btn_layout)
+
+        main_layout.addWidget(self.card)
+
+    # ───────────────────────── LOAD USER ─────────────────────────
+    def _load_user(self):
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT nom, username, email, poste
+            FROM utilisateur
+            WHERE id=?
+        """, (self.user_id,))
+
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            QMessageBox.critical(self, "Erreur", "Utilisateur introuvable")
+            self.close()
+            return
+
+        self.nom.setText(row["nom"])
+        self.username.setText(row["username"])
+        self.email.setText(row["email"])
+        self.poste.setCurrentText(row["poste"] or "")
+
+    # ───────────────────────── SAVE + AUDIT ─────────────────────────
+    def _save(self):
+
+        nom = self.nom.text().strip()
+        username = self.username.text().strip()
+        email = self.email.text().strip()
+        poste = self.poste.currentText()
+
+        if not nom or not username or not email:
+            QMessageBox.warning(self, "Erreur", "Champs obligatoires")
+            return
+
+        conn = get_connection()
+        cur = conn.cursor()
+        user = get_user()
+
+        try:
+
+            # ───────── UPDATE ─────────
+            if self.user_id:
+
+                cur.execute("SELECT * FROM utilisateur WHERE id=?", (self.user_id,))
+                old_data = dict(cur.fetchone())
+
+                new_data = {
+                    "nom": nom,
+                    "username": username,
+                    "email": email,
+                    "poste": poste
+                }
+
+                cur.execute("""
+                    UPDATE utilisateur
+                    SET nom=?, username=?, email=?, poste=?
+                    WHERE id=?
+                """, (nom, username, email, poste, self.user_id))
+
+                conn.commit()
+
+                log_activite(
+                    f"Modification utilisateur {self.user_id}",
+                    module="config",
+                    utilisateur=user["username"]
+                )
+
+                self.audit.log(
+                    action="UPDATE",
+                    table="utilisateur",
+                    record_id=self.user_id,
+                    old_data=old_data,
+                    new_data=new_data,
+                    utilisateur=user["username"]
+                )
+
+            # ───────── CREATE ─────────
+            else:
+
+                if self.password.text() != self.conf_password.text():
+                    QMessageBox.warning(self, "Erreur", "Mots de passe différents")
+                    return
+
+                pwd = hash_password(self.password.text())
+
+                cur.execute("""
+                    INSERT INTO utilisateur (nom, username, email, password, poste)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (nom, username, email, pwd, poste))
+
+                conn.commit()
+
+                self.audit.log(
+                    action="INSERT",
+                    table="utilisateur",
+                    record_id=username,
+                    old_data=None,
+                    new_data={
+                        "nom": nom,
+                        "username": username,
+                        "email": email,
+                        "poste": poste
+                    },
+                    utilisateur=user["username"]
+                )
+
+                log_activite(
+                    "Création utilisateur",
+                    module="config",
+                    utilisateur=user["username"]
+                )
+
+            if self.refresh_callback:
+                self.refresh_callback()
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Succès")
+            msg.setText("Opération réussie")
+            msg.setStyleSheet(self.styled_messagebox())
+            msg.exec()
+
+            self.close()
+
+        except Exception as e:
+            conn.rollback()
+            QMessageBox.critical(self, "Erreur", str(e))
+
+        finally:
+            conn.close()
+
+    # ───────────────────────── DRAG ─────────────────────────
+    def mousePressEvent(self, event):
+        self.old_pos = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event):
+        if self.old_pos:
+            delta = event.globalPosition().toPoint() - self.old_pos
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self.old_pos = event.globalPosition().toPoint()
