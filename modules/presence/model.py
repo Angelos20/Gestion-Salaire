@@ -5,15 +5,30 @@ from modules.presence.controller import calcul_heures
 def ajouter_presence(employe_id, date, heure_entree, heure_sortie, statut):
     conn = get_connection()
     cursor = conn.cursor()
+
     heure_travaillees = calcul_heures(heure_entree, heure_sortie)
+
     cursor.execute("""
-        INSERT INTO presence (employe_id, date, heure_entree, heure_sortie, heure_travaillees, statut)
+        INSERT INTO presence (
+            employe_id,
+            date,
+            heure_entree,
+            heure_sortie,
+            heure_travaillees,
+            statut
+        )
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (employe_id, date, heure_entree, heure_sortie, heure_travaillees, statut))
+    """, (
+        employe_id,
+        date,
+        heure_entree,
+        heure_sortie,
+        heure_travaillees,
+        statut
+    ))
 
     conn.commit()
     conn.close()
-
 
 def get_presences():
     conn = get_connection()

@@ -1,14 +1,23 @@
-#modules/dashboard/ui.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QGridLayout, QFrame, QGraphicsDropShadowEffect, QScrollArea, QDateEdit, QPushButton
+    QGridLayout, QFrame, QGraphicsDropShadowEffect,
+    QScrollArea, QDateEdit, QPushButton
 )
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QDate
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QDate, Signal
 from PySide6.QtGui import QFont
 from datetime import datetime
 
 from modules.dashboard.controller import get_kpis, get_alertes, get_recent_activities
 from modules.dashboard.charts import ChartCanvas
+
+
+# ================= LABEL CLIQUABLE =================
+class ClickableLabel(QLabel):
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 # ================= CARTE ANIMÉE =================
@@ -30,21 +39,6 @@ class AnimatedCard(QFrame):
         self.anim = QPropertyAnimation(self.shadow, b"blurRadius")
         self.anim.setDuration(200)
         self.anim.setEasingCurve(QEasingCurve.OutCubic)
-        self.setCursor(Qt.PointingHandCursor)
-
-    def enterEvent(self, event):
-        self.anim.stop()
-        self.anim.setStartValue(10)
-        self.anim.setEndValue(25)
-        self.anim.start()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.anim.stop()
-        self.anim.setStartValue(25)
-        self.anim.setEndValue(10)
-        self.anim.start()
-        super().leaveEvent(event)
 
 
 # ================= DASHBOARD =================
@@ -71,21 +65,20 @@ class DashboardPage(QWidget):
 
         self.btn_actualiser = QPushButton("Actualiser")
         self.btn_actualiser.clicked.connect(self.rafraichir)
-        self.btn_actualiser.setStyleSheet("""QPushButton {
-                background-color: "#0A1640";
+        self.btn_actualiser.setStyleSheet("""
+            QPushButton {
+                background-color: #0A1640;
                 color: white;
                 font-weight: bold;
-                font-size : 15px ;
+                font-size: 15px;
                 padding: 10px 20px;
                 border-radius: 5px;
-                font-family: sans-serif;
             }
-        QPushButton:hover   { background-color:"#1E6FD9"; }
+            QPushButton:hover { background-color:#1E6FD9; }
         """)
 
         self.date_fin = QDateEdit()
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
-        self.date_fin.setStyleSheet("color:black;font-family: sans-serif;")
         self.date_fin.setDate(QDate.currentDate())
         self.date_fin.setCalendarPopup(True)
         self.date_fin.dateChanged.connect(self.update_selected_date)
@@ -150,6 +143,7 @@ class DashboardPage(QWidget):
         self.chart1 = ChartCanvas()
         self.chart2 = ChartCanvas()
         self.chart3 = ChartCanvas()
+
         self.chart1.setFixedHeight(250)
         self.chart2.setFixedHeight(250)
         self.chart3.setFixedHeight(250)
@@ -167,7 +161,7 @@ class DashboardPage(QWidget):
         self.alert_scroll = QScrollArea()
         self.alert_scroll.setWidgetResizable(True)
         self.alert_scroll.setWidget(self.alert_container)
-        self.alert_scroll.setMaximumHeight(120)
+        self.alert_scroll.setMaximumHeight(140)
 
         main_layout.addWidget(self.wrap_card(self.alert_scroll))
 
@@ -178,7 +172,7 @@ class DashboardPage(QWidget):
         self.activity_scroll = QScrollArea()
         self.activity_scroll.setWidgetResizable(True)
         self.activity_scroll.setWidget(self.activity_container)
-        self.activity_scroll.setMaximumHeight(150)
+        self.activity_scroll.setMaximumHeight(160)
 
         main_layout.addWidget(self.wrap_card(self.activity_scroll))
 
@@ -191,10 +185,6 @@ class DashboardPage(QWidget):
         self.refresh_timer.timeout.connect(self.refresh)
         self.refresh_timer.start(3000)
 
-        self.update_data()
-
-    def rafraichir(self):
-        self.refresh()
         self.update_data()
 
     # ================= UTILS =================
@@ -224,18 +214,20 @@ class DashboardPage(QWidget):
 
     # ================= DATA =================
     def update_data(self):
-        date = self.selected_date
-        kpis = get_kpis(date)
+        kpis = get_kpis(self.selected_date)
 
         values = [
-            kpis.get("employes") or 0,
-            kpis.get("masse_salariale") or 0,
-            kpis.get("salaire_moyen") or 0,
-            kpis.get("total_paye") or 0
+            max(0, int(kpis.get("employes") or 0)),
+            max(0, float(kpis.get("masse_salariale") or 0)),
+            max(0, float(kpis.get("salaire_moyen") or 0)),
+            max(0, float(kpis.get("total_paye") or 0))
         ]
 
         for label, val in zip(self.kpi_labels, values):
-            label.setText(str(val))
+            if isinstance(val, float):
+                label.setText(f"{val:,.2f}")
+            else:
+                label.setText(str(val))
 
         self.chart1.plot_presence(
             kpis.get("present") or 0,
@@ -249,35 +241,37 @@ class DashboardPage(QWidget):
             kpis.get("total_paye") or 0
         )
 
-        pie_values = [
+        self.chart3.plot_pie(
             kpis.get("present") or 0,
             kpis.get("absent") or 0,
             kpis.get("retard") or 0,
             kpis.get("depart") or 0
-        ]
-
-        if sum(pie_values) == 0:
-            pie_values = [0, 0, 0, 0]
-
-        self.chart3.plot_pie(*pie_values)
+        )
 
         # ================= ALERTES =================
-        alertes = get_alertes(date) or ["Aucune alerte"]
-
         self.clear_layout(self.alert_layout)
 
-        for a in alertes:
-            self.alert_layout.addWidget(QLabel(f"⚠ {a}"))
+        title = QLabel("Notifications")
+        title.setStyleSheet("font-weight:bold;font-size:14px;")
+        self.alert_layout.addWidget(title)
+
+        for a in get_alertes(self.selected_date):
+            label = ClickableLabel(f"⚠ {a}")
+            label.setCursor(Qt.PointingHandCursor)
+
+            if "absent" in a.lower() or "retard" in a.lower():
+                label.clicked.connect(self.open_presence_window)
+
+            self.alert_layout.addWidget(label)
 
         # ================= ACTIVITÉS =================
-        activities = get_recent_activities(date)
-
-        if not isinstance(activities, list):
-            activities = activities[-30:]
-        if not activities:
-            activities = ["Aucune activité récente"]
-
         self.clear_layout(self.activity_layout)
+
+        title2 = QLabel("Activités récentes")
+        title2.setStyleSheet("font-weight:bold;font-size:14px;")
+        self.activity_layout.addWidget(title2)
+
+        activities = get_recent_activities(self.selected_date) or ["Aucune activité"]
 
         for a in activities:
             self.activity_layout.addWidget(QLabel(f"🔹 {a}"))
@@ -287,24 +281,19 @@ class DashboardPage(QWidget):
         if not self.isVisible():
             return
 
-        activities = get_recent_activities(self.selected_date)
+        self.update_data()
 
-        if not isinstance(activities, list):
-            return
-
-        activities = list(map(str, activities))
-
-        if hash(tuple(activities)) == getattr(self, "_activity_hash", None):
-            return
-
-        self.clear_layout(self.activity_layout)
-
-        for a in activities:
-            self.activity_layout.addWidget(QLabel(f"🔹 {a}"))
-
-        self._activity_hash = hash(tuple(activities))
+    # ================= PRESENCE WINDOW =================
+    def open_presence_window(self):
+        from modules.presence.liste_presence import ListePresence
+        self.presence_window = ListePresence()
+        self.presence_window.show()
 
     # ================= DATE =================
     def update_selected_date(self, qdate):
         self.selected_date = qdate.toString("yyyy-MM-dd")
+        self.update_data()
+
+    # ================= BUTTON =================
+    def rafraichir(self):
         self.update_data()

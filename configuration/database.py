@@ -180,11 +180,17 @@ def init_db():
     CREATE TABLE IF NOT EXISTS employes (
         id TEXT PRIMARY KEY NOT NULL,
         nom TEXT NOT NULL,
-        prenom TEXT ,
+        prenom TEXT,
         email TEXT,
         telephone TEXT NOT NULL,
         poste TEXT,
         date_embauche TEXT,
+
+        -- NOUVEAUX CHAMPS
+        type_contrat TEXT,
+        date_fin_contrat TEXT,
+        heure_travail_jour REAL,
+
         salaire_base REAL,
         adresse TEXT,
         statut TEXT

@@ -25,11 +25,11 @@ from PySide6.QtCore import QDate, QDateTime
 from PySide6.QtGui import QFont
 
 from configuration.database import get_connection
-from modules.salaire.model import get_employes, get_avance_conf
+from modules.salaire.model import get_employes,calcul_plafond_avance,calculer_jours_conges
 from modules.dashboard.controller import log_activite
 from configuration.audit_model import AuditModel
 from configuration.security import get_user
-
+from configuration.database import get_config
 
 # ─────────────────────────────────────────────
 # CLASSE
@@ -630,29 +630,15 @@ class AvanceCongeForm(QWidget):
 
         montant = self.sb_avance.value()
 
-        plafond, autoriser = get_avance_conf()
-
-        if montant <= 0:
-
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Erreur")
-            msg.setText("Montant invalide !")
-            msg.setIcon(QMessageBox.Warning)
-            msg.setStyleSheet(self.getStyleSheet())
-            msg.exec()
-
-            return
+        plafond = calcul_plafond_avance(employe_id)
 
         if montant > plafond:
-
-
             msg = QMessageBox(self)
             msg.setWindowTitle("Erreur")
-            msg.setText(f"Le montant dépasse le plafont ({plafond} Ar !")
+            msg.setText(f"Plafond dépassé ({plafond:,.0f} Ar)")
             msg.setIcon(QMessageBox.Warning)
             msg.setStyleSheet(self.getStyleSheet())
             msg.exec()
-
             return
 
         date_time = QDateTime.currentDateTime() \
@@ -748,6 +734,31 @@ class AvanceCongeForm(QWidget):
             .toString(
                 "yyyy-MM-dd HH:mm:ss"
         )
+
+        config = get_config()
+
+        # limite annuelle (fallback = 35 jours)
+        limite = float(config.get("conges_annuels", 35))
+
+        # année du congé
+        annee = debut[:4]
+
+        jours_existants = calculer_jours_conges(employe_id, annee)
+
+        from datetime import datetime
+        d1 = datetime.strptime(debut, "%Y-%m-%d")
+        d2 = datetime.strptime(fin, "%Y-%m-%d")
+
+        jours_nouveaux = (d2 - d1).days + 1
+
+        if jours_existants + jours_nouveaux > limite:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Erreur")
+            msg.setText("Limite de congés mensuelle dépassée")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setStyleSheet(self.getStyleSheet())
+            msg.exec()
+            return
 
         conn = get_connection()
 

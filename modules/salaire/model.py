@@ -1,5 +1,5 @@
 #model salaire
-from configuration.database import get_connection
+from configuration.database import get_connection, get_config
 from datetime import datetime
 
 # ─────────────────────────────
@@ -246,3 +246,44 @@ def get_salaire_paye(mois=None):
         }
         for r in rows
     ]
+
+def calcul_plafond_avance(employe_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT salaire_base FROM employes WHERE id=?", (employe_id,))
+    emp = cursor.fetchone()
+
+    if not emp:
+        return 0
+
+    salaire_base = float(emp[0] or 0)
+
+    config = get_config()
+    pourcentage = float(config.get("plafond_avance", 0))
+
+    return salaire_base * (pourcentage / 100)
+
+def calculer_jours_conges(employe_id, annee):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT date_debut, date_fin
+        FROM conges
+        WHERE employe_id = ?
+        AND substr(date_debut, 1, 7) = ?
+    """, (employe_id, annee))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    total = 0
+
+    for d1, d2 in rows:
+        from datetime import datetime
+        start = datetime.strptime(d1, "%Y-%m-%d")
+        end = datetime.strptime(d2, "%Y-%m-%d")
+        total += (end - start).days + 1
+
+    return total
