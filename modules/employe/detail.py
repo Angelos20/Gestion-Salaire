@@ -110,13 +110,15 @@ class EmployeDetail(QWidget):
 
             ("📅 Embauche", self.employe.get("date_embauche", "")),
 
-            ("💰 Salaire", f"{self.employe.get('salaire_base', 0):,.0f} Ar"),
-
+            (
+                "💰 Salaire",
+                f"{float(self.employe.get('salaire_base', 0) or 0):,.0f} Ar"
+            ),
             ("📄 Contrat", self.employe.get("type_contrat", "")),
 
             ("📆 Fin contrat", self.employe.get("date_fin_contrat", "")),
 
-            ("⏱ Heures/jour", self.employe.get("heure_travail", "")),
+            ("⏱ Heures/jour", self.employe.get("heure_travail_jour", "")),
 
             ("📊 Statut", self.employe.get("statut", "")),
 

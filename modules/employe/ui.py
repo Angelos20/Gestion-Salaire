@@ -10,6 +10,9 @@ from modules.employe.formulaire import EmployeFormulaire
 from modules.employe.detail import EmployeDetail
 from modules.employe.model import EmployeModel
 from modules.dashboard.controller import log_activite
+from configuration.security import get_user
+from configuration.audit_model import AuditModel
+audit = AuditModel()
 
 class EmployeListe(QWidget):
     def __init__(self, controller: EmployeController):
@@ -258,7 +261,7 @@ class EmployeListe(QWidget):
                     QTableWidgetItem(
                         str(
                             emp.get(
-                                'heure_travail',
+                                'heure_travail_jour',
                                 ''
                             )
                         )
@@ -328,12 +331,25 @@ class EmployeListe(QWidget):
         )
 
         self.form = EmployeFormulaire(self.controller)
-        self.form.employe_sauvegarde.connect(self.rafraichir)
+        self.form.employe_sauvegarde.connect(
+            lambda _: self.rafraichir()
+        )
         self.form.show()
 
     # -------- Ouvrir le détail --------
     def ouvrir_detail(self, index):
-        emp_id = (self.table.item(index.row(), 0).text())
+        item = self.table.item(
+            index.row(),
+            0
+        )
+
+        if not item:
+            return
+
+        emp_id = item.text()
+
+        if emp_id == "Aucun résultat":
+            return
         employe = self.controller.get_employe(emp_id)
         log_activite(
             f"Consultation employé ID {emp_id}",

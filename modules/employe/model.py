@@ -101,7 +101,7 @@ class EmployeModel:
                     salaire_base,
                     type_contrat,
                     date_fin_contrat,
-                    heure_travail,
+                    heure_travail_jour,
                     adresse,
                     statut
 
@@ -131,7 +131,7 @@ class EmployeModel:
 
                 data.get("date_fin_contrat"),
 
-                data.get("heure_travail"),
+                data.get("heure_travail_jour"),
 
                 data.get("adresse"),
 
@@ -161,71 +161,60 @@ class EmployeModel:
 
         try:
 
-            cursor = self.conn.cursor()
+            conn = get_connection()
+
+            cursor = conn.cursor()
 
             cursor.execute("""
-
                 UPDATE employes
-
                 SET
-
-                    nom = ?,
-                    prenom = ?,
-                    email = ?,
-                    telephone = ?,
-                    poste = ?,
-                    date_embauche = ?,
-                    salaire_base = ?,
-                    type_contrat = ?,
-                    date_fin_contrat = ?,
-                    heure_travail = ?,
-                    adresse = ?,
-                    statut = ?
-
-                WHERE id = ?
-
+                    nom=?,
+                    prenom=?,
+                    email=?,
+                    telephone=?,
+                    poste=?,
+                    date_embauche=?,
+                    salaire_base=?,
+                    type_contrat=?,
+                    date_fin_contrat=?,
+                    heure_travail_jour=?,
+                    adresse=?,
+                    statut=?
+                WHERE id=?
             """, (
 
                 data.get("nom"),
-
                 data.get("prenom"),
-
                 data.get("email"),
-
                 data.get("telephone"),
-
                 data.get("poste"),
-
                 data.get("date_embauche"),
-
                 data.get("salaire_base"),
-
                 data.get("type_contrat"),
-
                 data.get("date_fin_contrat"),
-
-                data.get("heure_travail"),
-
+                data.get("heure_travail_jour"),
                 data.get("adresse"),
-
                 data.get("statut"),
-
                 emp_id
 
             ))
 
-            self.conn.commit()
+            conn.commit()
 
-            return cursor.rowcount > 0
+            success = cursor.rowcount > 0
+
+            conn.close()
+
+            return success
 
         except sqlite3.Error as e:
 
             print(
-                f"Erreur modification employé : {e}"
+                "Erreur SQLite UPDATE :",
+                str(e)
             )
 
             return False
-
     # ==================================================
     # DELETE
     # ==================================================
@@ -234,25 +223,34 @@ class EmployeModel:
 
         try:
 
-            cursor = self.conn.cursor()
+            conn = get_connection()
 
-            cursor.execute("""
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
                 DELETE FROM employes
                 WHERE id = ?
-            """, (emp_id,))
+                """,
+                (emp_id,)
+            )
 
-            self.conn.commit()
+            conn.commit()
 
-            return cursor.rowcount > 0
+            success = cursor.rowcount > 0
+
+            conn.close()
+
+            return success
 
         except sqlite3.Error as e:
 
             print(
-                f"Erreur suppression employé : {e}"
+                "Erreur SQLite DELETE :",
+                str(e)
             )
 
             return False
-
     # ==================================================
     # SEARCH
     # ==================================================
@@ -408,32 +406,18 @@ class EmployeModel:
     # ==================================================
 
     def _row_to_dict(self, row):
-
         return {
-
             "id": row[0],
-
             "nom": row[1],
-
             "prenom": row[2],
-
             "email": row[3],
-
             "telephone": row[4],
-
             "poste": row[5],
-
             "date_embauche": row[6],
-
-            "salaire_base": row[7],
-
-            "type_contrat": row[8],
-
-            "date_fin_contrat": row[9],
-
-            "heure_travail": row[10],
-
+            "type_contrat": row[7],
+            "date_fin_contrat": row[8],
+            "heure_travail_jour": row[9],
+            "salaire_base": row[10],
             "adresse": row[11],
-
-            "statut": row[12]
+            "statut": row[12],
         }

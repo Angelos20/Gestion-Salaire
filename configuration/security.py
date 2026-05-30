@@ -50,20 +50,22 @@ def verify_password(password: str, stored_password: str) -> bool:
 CURRENT_USER = None
 
 
-def set_user(user_tuple):
-
+def set_user(user):
     global CURRENT_USER
 
-    if not user_tuple:
+    if not user:
         CURRENT_USER = None
         return
 
-    CURRENT_USER = {
-        "id": user_tuple[0],
-        "username": user_tuple[1],
-        "email": user_tuple[2],
-        "role": user_tuple[3]
-    }
+    if isinstance(user, dict):
+        CURRENT_USER = user
+    else:
+        CURRENT_USER = {
+            "id": user[0],
+            "username": user[1],
+            "email": user[2],
+            "role": user[3]
+        }
 
 def get_user():
     """Retourne l'utilisateur connecté"""

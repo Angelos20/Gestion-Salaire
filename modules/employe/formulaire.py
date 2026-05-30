@@ -529,7 +529,7 @@ class EmployeFormulaire(QWidget):
 
         self.heure_travail.setValue(
             self.employe.get(
-                "heure_travail",
+                "heure_travail_jour",
                 8
             )
         )
@@ -574,66 +574,72 @@ class EmployeFormulaire(QWidget):
     def sauvegarder(self):
 
         if (
-                not self.id.text()
-                or not self.nom.text()
-                or not self.tel.text()
-                or not self.poste.text()
-                or not self.salaire.text()
+                not self.id.text().strip()
+                or not self.nom.text().strip()
+                or not self.tel.text().strip()
+                or not self.poste.text().strip()
+                or not self.salaire.text().strip()
         ):
-
             QMessageBox.warning(
                 self,
                 "Erreur",
                 "Veuillez remplir tous les champs obligatoires."
             )
-
             return
 
         if self.email.text():
 
             if "@" not in self.email.text():
-
                 QMessageBox.warning(
                     self,
                     "Erreur",
                     "Email invalide."
                 )
-
                 return
 
-        if len(
-                self.tel.text().replace(" ", "")
-        ) < 8:
-
+        if len(self.tel.text().replace(" ", "")) < 8:
             QMessageBox.warning(
                 self,
                 "Erreur",
                 "Numéro téléphone invalide."
             )
+            return
 
+        try:
+
+            salaire = float(
+                self.salaire.text().replace(",", ".")
+            )
+
+        except ValueError:
+
+            QMessageBox.warning(
+                self,
+                "Erreur",
+                "Salaire invalide."
+            )
             return
 
         data = {
 
-            "id": self.id.text(),
+            "id": self.id.text().strip(),
 
-            "nom": self.nom.text(),
+            "nom": self.nom.text().strip(),
 
-            "prenom": self.prenom.text(),
+            "prenom": self.prenom.text().strip(),
 
-            "email": self.email.text(),
+            "email": self.email.text().strip(),
 
-            "telephone": self.tel.text(),
+            "telephone": self.tel.text().strip(),
 
-            "poste": self.poste.text(),
+            "poste": self.poste.text().strip(),
 
             "date_embauche":
                 self.date.date().toString(
                     "yyyy-MM-dd"
                 ),
 
-            "salaire_base":
-                float(self.salaire.text()),
+            "salaire_base": salaire,
 
             "type_contrat":
                 self.type_contrat.currentText(),
@@ -642,11 +648,10 @@ class EmployeFormulaire(QWidget):
                 self.date_fin.date().toString(
                     "yyyy-MM-dd"
                 )
-                if self.type_contrat.currentText()
-                   != "CDI"
+                if self.type_contrat.currentText() != "CDI"
                 else None,
 
-            "heure_travail":
+            "heure_travail_jour":
                 self.heure_travail.value(),
 
             "adresse":
@@ -656,16 +661,47 @@ class EmployeFormulaire(QWidget):
                 self.statut.currentText()
         }
 
-        self.employe_sauvegarde.emit(data)
+        # ==========================
+        # AJOUT OU MODIFICATION
+        # ==========================
 
-        QMessageBox.information(
-            self,
-            "Succès",
-            "Employé enregistré avec succès."
-        )
+        if self.is_modification:
 
-        self.close()
+            result = self.controller.modifier(
+                self.employe["id"],
+                data
+            )
 
+        else:
+
+            result = self.controller.ajouter(
+                data
+            )
+
+        if result.get("success"):
+
+            self.employe_sauvegarde.emit(
+                result.get("employe", data)
+            )
+
+            QMessageBox.information(
+                self,
+                "Succès",
+                "Employé enregistré avec succès."
+            )
+
+            self.close()
+
+        else:
+
+            QMessageBox.warning(
+                self,
+                "Erreur",
+                result.get(
+                    "error",
+                    "Une erreur est survenue."
+                )
+            )
     def getStyleSheet(self):
 
         return """

@@ -3,7 +3,9 @@ from PySide6.QtCore import QObject, Signal
 from modules.employe.model import EmployeModel
 
 from modules.dashboard.controller import log_activite
-
+from configuration.security import get_user
+from configuration.audit_model import AuditModel
+audit = AuditModel()
 
 class EmployeController(QObject):
 
@@ -92,13 +94,24 @@ class EmployeController(QObject):
             # ----------------------------------------------
             # LOG
             # ----------------------------------------------
+            user = get_user()
+            username = user["username"] if user else "unknown"
 
             log_activite(
                 f"Ajout employé : "
                 f"{data['nom']} "
                 f"{data['prenom']}",
                 module="employe",
-                utilisateur="system"
+                utilisateur=username
+            )
+
+            audit.log(
+                action="AJOUT",
+                table="employes",
+                record_id=data["id"],
+                old_data=None,
+                new_data=data,
+                utilisateur=username
             )
 
             return {
@@ -158,11 +171,25 @@ class EmployeController(QObject):
                 self.get_liste()
             )
 
+            user = get_user()
+            username = user["username"] if user else "unknown"
+
             log_activite(
                 f"Modification employé : "
                 f"{emp_id}",
                 module="employe",
-                utilisateur="system"
+                utilisateur=username
+            )
+
+            old_employe = self.model.get_by_id(emp_id)
+            new_employe = self.model.get_by_id(emp_id)
+            audit.log(
+                action="MODIFICATION",
+                table="employes",
+                record_id=emp_id,
+                old_data=old_employe,
+                new_data=new_employe,
+                utilisateur=username
             )
 
             return {
@@ -178,6 +205,7 @@ class EmployeController(QObject):
                 module="employe",
                 utilisateur="system"
             )
+
 
             return {
                 "success": False,
@@ -218,11 +246,22 @@ class EmployeController(QObject):
                 self.get_liste()
             )
 
+            user = get_user()
+            username = user["username"] if user else "unknown"
             log_activite(
                 f"Suppression employé : "
                 f"{emp_id}",
                 module="employe",
-                utilisateur="system"
+                utilisateur=username
+            )
+
+            audit.log(
+                action="SUPPRESSION",
+                table="employes",
+                record_id=emp_id,
+                old_data=employe,
+                new_data=None,
+                utilisateur=username
             )
 
             return {
@@ -251,6 +290,15 @@ class EmployeController(QObject):
 
         try:
 
+            user = get_user()
+            username = user["username"] if user else "unknown"
+
+            audit.log(
+                action="RECHERCHER",
+                table="employes",
+                record_id=terme,
+                utilisateur=username
+            )
             return self.model.search(terme)
 
         except Exception as e:
@@ -271,7 +319,15 @@ class EmployeController(QObject):
     def filtrer_par_poste(self, poste):
 
         try:
+            user = get_user()
+            username = user["username"] if user else "unknown"
 
+            audit.log(
+                action="FILTER_PAR_POSTE",
+                table="employes",
+                record_id=poste,
+                utilisateur=username
+            )
             return self.model.get_by_poste(
                 poste
             )
