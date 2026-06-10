@@ -1,11 +1,11 @@
 from PySide6.QtWidgets import (
     QComboBox, QWidget, QFrame, QLabel, QVBoxLayout,QHBoxLayout,
-    QAbstractItemView, QTableWidgetItem, QPushButton,  QTextEdit,QLineEdit, QMessageBox,QTableWidget,
+    QAbstractItemView, QTableWidgetItem, QPushButton,QLineEdit, QMessageBox,QTableWidget,
     QCheckBox, QTimeEdit, QFormLayout, QDoubleSpinBox, QTabWidget, QFileDialog,QHeaderView
 )
-from PySide6.QtCore import Qt, QPoint, QSize, QTime
+from PySide6.QtCore import Qt,QTime, QSize
 from PySide6.QtGui import (
-    QPainter, QColor, QFont, QPen, QCursor, QPainterPath, QPixmap
+    QPainter, QFont, QPainterPath, QPixmap, QIcon
 )
 from configuration.database import get_config, update_config, get_connection
 from modules.dashboard.controller import log_activite
@@ -763,7 +763,7 @@ class UserEditorWindow(QWidget):
             }
 
             QFrame{
-                background-color: white;
+                background-color: grey;
                 border-radius: 20px;
             }
 
@@ -779,6 +779,7 @@ class UserEditorWindow(QWidget):
                 border-radius: 8px;
                 padding: 8px;
                 min-height: 20px;
+                color: black;
             }
 
             QLineEdit:focus, QComboBox:focus{
@@ -844,6 +845,7 @@ class UserEditorWindow(QWidget):
         # TITLE
         self.titre = QLabel("Modifier utilisateur" if self.user_id else "Ajouter utilisateur")
         self.titre.setAlignment(Qt.AlignCenter)
+        self.titre.setStyleSheet("font-size:18px;")
 
         # INPUTS
         self.nom = QLineEdit()
@@ -855,9 +857,20 @@ class UserEditorWindow(QWidget):
         self.email = QLineEdit()
         self.email.setPlaceholderText("Email")
 
+        pwd_layout = QHBoxLayout()
         self.password = QLineEdit()
         self.password.setPlaceholderText("Mot de passe")
         self.password.setEchoMode(QLineEdit.Password)
+
+        self.btn_eye = QPushButton()
+        self.btn_eye.setIcon(QIcon("./resources/icons/visible.png"))
+        self.btn_eye.setIconSize(QSize(40, 40))
+        self.btn_eye.setCheckable(True)
+        self.btn_eye.clicked.connect(self.toggle_password)
+        self.btn_eye.setStyleSheet("background: transparent; border: none;")
+
+        pwd_layout.addWidget(self.password)
+        pwd_layout.addWidget(self.btn_eye)
 
         self.conf_password = QLineEdit()
         self.conf_password.setPlaceholderText("Confirmer mot de passe")
@@ -887,7 +900,7 @@ class UserEditorWindow(QWidget):
         card_layout.addWidget(self.nom)
         card_layout.addWidget(self.username)
         card_layout.addWidget(self.email)
-        card_layout.addWidget(self.password)
+        card_layout.addLayout(pwd_layout)
         card_layout.addWidget(self.conf_password)
         card_layout.addWidget(self.poste)
         card_layout.addLayout(btn_layout)
@@ -1014,6 +1027,7 @@ class UserEditorWindow(QWidget):
             msg = QMessageBox(self)
             msg.setWindowTitle("Succès")
             msg.setText("Opération réussie")
+            msg.setIcon(QMessageBox.Information)
             msg.setStyleSheet(self.styled_messagebox())
             msg.exec()
 
@@ -1025,6 +1039,16 @@ class UserEditorWindow(QWidget):
 
         finally:
             conn.close()
+
+    def toggle_password(self):
+        if self.btn_eye.isChecked():
+            self.password.setEchoMode(QLineEdit.Normal)
+            self.conf_password.setEchoMode(QLineEdit.Normal)
+            self.btn_eye.setIcon(QIcon("./resources/icons/hide.png"))
+        else:
+            self.password.setEchoMode(QLineEdit.Password)
+            self.conf_password.setEchoMode(QLineEdit.Password)
+            self.btn_eye.setIcon(QIcon("./resources/icons/visible.png"))
 
     # ───────────────────────── DRAG ─────────────────────────
     def mousePressEvent(self, event):

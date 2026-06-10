@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyCharm
+.idea/
+
+# Environnement virtuel
+venv/
+env/
+cyber/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# SQLite (optionnel)
+# data/*.db

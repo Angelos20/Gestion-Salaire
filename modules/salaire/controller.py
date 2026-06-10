@@ -7,7 +7,8 @@ from datetime import datetime
 from configuration.database import get_config
 from reportlab.platypus import Image
 import os
-
+from reportlab.lib.units import cm
+from pathlib import Path
 
 # ─────────────────────────────────────────────
 # UTILITAIRE SAFE FLOAT
@@ -99,11 +100,69 @@ def calculer_salaire(
     }
 
 
+def footer(canvas, doc):
+    """
+    Pied de page du bulletin
+    """
+
+    canvas.saveState()
+
+    # Racine du projet
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+    # Logo NFA
+    logo_nfa = BASE_DIR / "resources" / "icons" / "nfa.png"
+
+    if logo_nfa.exists():
+
+        largeur = 1.2 * cm
+        hauteur = 1.2 * cm
+
+        x = doc.pagesize[0] - largeur - 1.5 * cm
+        y = 0.8 * cm
+
+        # Cercle décoratif
+        canvas.circle(
+            x + largeur / 2,
+            y + hauteur / 2,
+            0.65 * cm,
+            stroke=1,
+            fill=0
+        )
+
+        # Logo
+        canvas.drawImage(
+            str(logo_nfa),
+            x,
+            y,
+            width=largeur,
+            height=hauteur,
+            preserveAspectRatio=True,
+            mask='auto'
+        )
+
+    # Numéro de page
+    canvas.setFont("Helvetica", 8)
+
+    canvas.drawString(
+        1 * cm,
+        0.8 * cm,
+        f"Page {canvas.getPageNumber()}"
+    )
+
+    canvas.restoreState()
 # ─────────────────────────────────────────────
 # BULLETIN PDF COMPLET
 # ─────────────────────────────────────────────
 def generer_bulletin_pdf(emp_id, nom, prenom, mois, data, filename="bulletin.pdf"):
-    doc = SimpleDocTemplate(filename, pagesize=A4)
+    doc = SimpleDocTemplate(
+        filename,
+        pagesize=A4,
+        topMargin=30,
+        bottomMargin=90,
+        leftMargin=40,
+        rightMargin=40
+    )
     styles = getSampleStyleSheet()
 
     config = get_config()
@@ -124,9 +183,6 @@ def generer_bulletin_pdf(emp_id, nom, prenom, mois, data, filename="bulletin.pdf
     )
 
     # ───── LOGO (CORRIGÉ) ─────
-    from reportlab.platypus import Image
-    import os
-
     if logo_path and os.path.exists(logo_path):
         logo = Image(logo_path)
         logo.drawHeight = 60
@@ -213,4 +269,8 @@ def generer_bulletin_pdf(emp_id, nom, prenom, mois, data, filename="bulletin.pdf
     elements.append(Paragraph("Signature Employeur : ____________________", styles["Normal"]))
     elements.append(Paragraph("Signature Employé : ____________________", styles["Normal"]))
 
-    doc.build(elements)
+    doc.build(
+        elements,
+        onFirstPage=footer,
+        onLaterPages=footer
+    )

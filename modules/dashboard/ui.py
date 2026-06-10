@@ -4,12 +4,22 @@ from PySide6.QtWidgets import (
     QScrollArea, QDateEdit, QPushButton
 )
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QDate, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from datetime import datetime
 
 from modules.dashboard.controller import get_kpis, get_alertes, get_recent_activities
 from modules.dashboard.charts import ChartCanvas
+from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+def load_icon(path, size=42):
+    pixmap = QPixmap(path)
+
+    if pixmap.isNull():
+        print("❌ Image introuvable :", path)
+
+    return pixmap.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
 # ================= LABEL CLIQUABLE =================
 class ClickableLabel(QLabel):
@@ -98,10 +108,10 @@ class DashboardPage(QWidget):
         self.kpi_labels = []
 
         kpi_data = [
-            ("👥", "Total employés", "#3B82F6"),
-            ("💰", "Masse salariale", "#10B981"),
-            ("📉", "Salaire moyen", "#F59E0B"),
-            ("💵", "Total payé", "#EF4444"),
+            (str(BASE_DIR / "resources/icons/user.png"), "Total employés", "#3B82F6"),
+            (str(BASE_DIR / "resources/icons/masse.png"), "Masse salariale", "#10B981"),
+            (str(BASE_DIR / "resources/icons/moyenn.png"), "Salaire moyen", "#F59E0B"),
+            (str(BASE_DIR / "resources/icons/paye.png"), "Total payé", "#EF4444"),
         ]
 
         for i, (icon, title, color) in enumerate(kpi_data):
@@ -116,16 +126,19 @@ class DashboardPage(QWidget):
 
             layout = QVBoxLayout(card)
 
-            icon_label = QLabel(icon)
+            # ================= ICON (PIXMAP STICKER) =================
+            icon_label = QLabel()
             icon_label.setAlignment(Qt.AlignCenter)
-            icon_label.setFont(QFont("Segoe UI Emoji", 42))
-            icon_label.setStyleSheet(f"color: {color};")
 
+            icon_label.setPixmap(load_icon(icon, 48))  # ✅ ICI
+
+            # ================= VALUE =================
             value = QLabel("0")
             value.setAlignment(Qt.AlignCenter)
             value.setFont(QFont("Segoe UI", 20, QFont.Bold))
             value.setStyleSheet(f"color: {color};")
 
+            # ================= TITLE =================
             label = QLabel(title)
             label.setAlignment(Qt.AlignCenter)
             label.setStyleSheet("color:#374151;")
