@@ -316,7 +316,6 @@ class PageLogin(QWidget):
             color: white;
             padding: 6px 12px;
             border-radius: 6px;
-            min-width: 80px;
         }
 
         QPushButton:hover {

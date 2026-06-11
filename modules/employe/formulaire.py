@@ -116,7 +116,7 @@ class EmployeFormulaire(QWidget):
 
         self.id = QLineEdit()
 
-        self.id.setPlaceholderText("E-00001")
+        self.id.setPlaceholderText("E-0001")
 
         self.id.setMinimumHeight(35)
 
@@ -247,14 +247,14 @@ class EmployeFormulaire(QWidget):
         self.lbl_date = QLabel("Date embauche *:")
 
         self.date = QDateEdit()
-
+        self.date.setStyleSheet("color:black;font-family: sans serif;")
         self.date.setDate(QDate.currentDate())
 
         self.date.setCalendarPopup(True)
 
         self.date.setDisplayFormat("dd/MM/yyyy")
 
-        self.date.setMinimumHeight(35)
+        self.date.setMinimumHeight(45)
 
         form_3.addRow(self.lbl_date, self.date)
 
@@ -323,6 +323,8 @@ class EmployeFormulaire(QWidget):
         )
 
         self.date_fin = QDateEdit()
+        self.date_fin.setStyleSheet("color:black;font-family: sans serif;")
+
 
         self.date_fin.setDate(
             QDate.currentDate()
@@ -334,7 +336,7 @@ class EmployeFormulaire(QWidget):
             "dd/MM/yyyy"
         )
 
-        self.date_fin.setMinimumHeight(35)
+        self.date_fin.setMinimumHeight(45)
 
         form_4.addRow(
             self.lbl_fin,

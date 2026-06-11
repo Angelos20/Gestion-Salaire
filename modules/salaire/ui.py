@@ -99,7 +99,7 @@ class TableauSalaireView(QWidget):
         search_layout.addWidget(self.cb_mois)
         search_layout.addWidget(self.cb_statut)
 
-        btn_action = QPushButton("Autre action")
+        btn_action = QPushButton("Avances ou congés")
         btn_action.setCursor(Qt.PointingHandCursor)
         btn_action.setStyleSheet("""
             QPushButton {

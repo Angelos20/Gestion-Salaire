@@ -181,7 +181,8 @@ def enregistrer_salaire(employe_id, mois, data):
 
     cursor.execute("""
         INSERT INTO salaire (
-            employe_id, mois,
+            employe_id, 
+            mois,
             salaire_base,
             bonus,
             deduction,
@@ -190,13 +191,6 @@ def enregistrer_salaire(employe_id, mois, data):
             date_paiement
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, date('now'))
-        ON CONFLICT(employe_id, mois)
-        DO UPDATE SET
-            bonus=excluded.bonus,
-            deduction=excluded.deduction,
-            salaire_net=excluded.salaire_net,
-            statut=excluded.statut,
-            date_paiement=date('now')
     """, (
         employe_id,
         mois,

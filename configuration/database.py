@@ -224,8 +224,7 @@ def init_db():
         salaire_net REAL,
         date_paiement TEXT,
         statut TEXT DEFAULT 'NON_PAYE',
-        FOREIGN KEY (employe_id) REFERENCES employes(id),
-        UNIQUE(employe_id, mois)
+        FOREIGN KEY (employe_id) REFERENCES employes(id)
     )
     """)
 

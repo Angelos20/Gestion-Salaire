@@ -72,7 +72,7 @@ class ListePresence(QWidget):
         filtre_layout = QHBoxLayout()
 
         style_input = """
-            QDateEdit, QComboBox {
+           QComboBox {
                 background-color: white;
                 border: 1px solid #D1D5DB;
                 border-radius: 6px;
@@ -84,6 +84,7 @@ class ListePresence(QWidget):
         self.date_debut = QDateEdit()
         self.date_debut.setStyleSheet("color:black;font-family: sans serif;")
         self.date_debut.setCalendarPopup(True)
+        self.date_debut.setMaximumHeight(30)
         self.date_debut.setDisplayFormat("dd/MM/yyyy")
         self.date_debut.setDate(QDate.currentDate().addDays(-7))
         self.date_debut.dateChanged.connect(self.afficher_presences)
@@ -92,6 +93,7 @@ class ListePresence(QWidget):
         self.date_fin = QDateEdit()
         self.date_fin.setStyleSheet("color:black;font-family: sans serif;")
         self.date_fin.setCalendarPopup(True)
+        self.date_debut.setMaximumHeight(30)
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
         self.date_fin.setDate(QDate.currentDate())
         self.date_fin.dateChanged.connect(self.afficher_presences)

@@ -212,8 +212,9 @@ class ConfigRHView(QWidget):
         self.taux_hsup.setToolTip("Coefficient heures supplémentaires (ex: 1.5)")
 
         self.social_impot = QDoubleSpinBox()
-        self.social_impot.setRange(1, 5)
+        self.social_impot.setRange(1, 30)
         self.social_impot.setSingleStep(0.1)
+        self.social_impot.setSuffix("%")
         self.social_impot.setStyleSheet(self._style())
 
         layout.addRow("Heures mensuelles", self.heures_mensuelles)
@@ -262,12 +263,13 @@ class ConfigRHView(QWidget):
 
         self.plafond_avance = QDoubleSpinBox()
         self.plafond_avance.setRange(0, 10000000)
-        self.plafond_avance.setSuffix(" Ar")
+        self.plafond_avance.setSuffix(" %")
         self.plafond_avance.setStyleSheet(self._style())
 
-        layout.addRow("Nombre max Congés/an", self.conges_par_mois)
+        layout.addRow("Nombre max des jours de Congés/an", self.conges_par_mois)
         layout.addRow("", self.autoriser_avance)
         layout.addRow("Plafond avance", self.plafond_avance)
+        
 
         self.tabs.addTab(tab, "🏖️ Congés")
 

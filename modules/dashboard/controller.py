@@ -40,16 +40,23 @@ def get_kpis(date=None):
 
     conn.close()
 
+    def to_float(x):
+        try:
+            return float(str(x).replace(" ", "").replace(",", "."))
+        except:
+            return 0.0
+    
+
     return {
         "employes": total_employes,
         "present": present,
         "absent": absent,
         "retard": retard,
         "depart": depart,
-        "taux_presence": round(taux_presence, 2),
-        "masse_salariale": round(masse_salariale, 2),
-        "salaire_moyen": round(salaire_moyen, 2),
-        "total_paye": round(total_paye, 2)
+        "taux_presence": to_float(round(taux_presence, 2)),
+        "masse_salariale": to_float(round(masse_salariale, 2)),
+        "salaire_moyen": to_float(round(salaire_moyen, 2)),
+        "total_paye": to_float(total_paye)
     }
 
 

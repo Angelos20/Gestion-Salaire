@@ -39,6 +39,7 @@ class AnimatedCard(QFrame):
                 background-color: white;
                 border-radius: 12px;
             }
+            
         """)
 
         self.shadow = QGraphicsDropShadowEffect(self)
@@ -62,9 +63,11 @@ class DashboardPage(QWidget):
         QWidget {
             background-color: #F4F6F9;
             font-family: Segoe UI;
+            font-size: 14px;
         }
         QLabel {
             color: #111827;
+            
         }
         """)
 
@@ -88,6 +91,8 @@ class DashboardPage(QWidget):
         """)
 
         self.date_fin = QDateEdit()
+        self.date_fin.setStyleSheet("color:black;font-family: sans serif;")
+        self.date_fin.setMaximumHeight(34)
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
         self.date_fin.setDate(QDate.currentDate())
         self.date_fin.setCalendarPopup(True)
@@ -96,11 +101,12 @@ class DashboardPage(QWidget):
         self.selected_date = self.date_fin.date().toString("yyyy-MM-dd")
 
         self.time_label = QLabel()
-
+        self.time_label.setStyleSheet("background-color: white; font-size: 48px; font-weight:bold;")
+        header.addStretch()
+        header.addWidget(self.time_label)
         header.addStretch()
         header.addWidget(self.btn_actualiser)
         header.addWidget(self.date_fin)
-        header.addWidget(self.time_label)
         main_layout.addLayout(header)
 
         # ================= KPI =================
@@ -135,8 +141,8 @@ class DashboardPage(QWidget):
             # ================= VALUE =================
             value = QLabel("0")
             value.setAlignment(Qt.AlignCenter)
-            value.setFont(QFont("Segoe UI", 20, QFont.Bold))
-            value.setStyleSheet(f"color: {color};")
+            value.setFont(QFont("Segoe UI", 40, QFont.Bold))
+            value.setStyleSheet(f"color: {color}; font-size: 28px")
 
             # ================= TITLE =================
             label = QLabel(title)
@@ -157,14 +163,24 @@ class DashboardPage(QWidget):
         self.chart2 = ChartCanvas()
         self.chart3 = ChartCanvas()
 
-        self.chart1.setFixedHeight(250)
-        self.chart2.setFixedHeight(250)
-        self.chart3.setFixedHeight(250)
+        self.chart1.setFixedHeight(300)
+        self.chart2.setFixedHeight(300)
+        self.chart3.setFixedHeight(300)
 
         chart_layout = QHBoxLayout()
-        chart_layout.addWidget(self.create_chart("Présence", self.chart1))
-        chart_layout.addWidget(self.create_chart("Salaire", self.chart2))
-        chart_layout.addWidget(self.create_chart("Répartition", self.chart3))
+
+        card1 = self.create_chart("Présence", self.chart1)
+        card2 = self.create_chart("Salaire", self.chart2)
+        card3 = self.create_chart("Répartition", self.chart3)
+        
+        card1.setMaximumWidth(450)
+        card2.setMaximumWidth(450)
+        card3.setMaximumWidth(450)
+        
+        chart_layout.addWidget(card1)
+        chart_layout.addWidget(card2)
+        chart_layout.addWidget(card3)
+        
         main_layout.addLayout(chart_layout)
 
         # ================= ALERTES =================
@@ -227,18 +243,24 @@ class DashboardPage(QWidget):
 
     # ================= DATA =================
     def update_data(self):
+        def to_float(x):
+            try:
+                return float(str(x).replace(" ", "").replace(",", "."))
+            except:
+                return 0.0
+        
         kpis = get_kpis(self.selected_date)
 
         values = [
             max(0, int(kpis.get("employes") or 0)),
-            max(0, float(kpis.get("masse_salariale") or 0)),
-            max(0, float(kpis.get("salaire_moyen") or 0)),
-            max(0, float(kpis.get("total_paye") or 0))
+            max(0, to_float(kpis.get("masse_salariale") or 0)),
+            max(0, to_float(kpis.get("salaire_moyen") or 0)),
+            max(0, to_float(kpis.get("total_paye") or 0))
         ]
 
         for label, val in zip(self.kpi_labels, values):
             if isinstance(val, float):
-                label.setText(f"{val:,.2f}")
+                label.setText(f"{val:,.0f}".replace(",", " "))
             else:
                 label.setText(str(val))
 

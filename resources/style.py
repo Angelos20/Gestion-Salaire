@@ -29,7 +29,6 @@ def getStyleSheet():
         padding: 10px 20px;
         border-radius: 6px;
         font-family: sans-serif;
-        max-width: 120px;
     }
 
     QPushButton:hover {
@@ -86,6 +85,7 @@ def getStyleSheet():
 
     QLabel {
         font-family: sans-serif;
+        font-size: 14px;
     }
     
     QTableWidget {
